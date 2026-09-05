@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Code Wheel — Sleuth Lab</title>
+  <style>
+:root{
+  --bg1:#0a0c14; --bg2:#14182a; --card:#111523; --panel:#0f1220;
+  --text:#eef1ff; --muted:#a9b0d7;
+  --accent:#00e5ff; --accent2:#ffd166; --accent3:#ff6ec7; /* cyan / gold / neon pink */
+  --ok:#7CFFC3; --warn:#ffbf69; --bad:#ff6b6b;
+
+  --radius:18px;
+  --shadow: 0 20px 50px rgba(0,0,0,.55), 0 4px 16px rgba(0,0,0,.35);
+}
+
+/* Layout */
+*{box-sizing:border-box;font-family:Inter,Segoe UI,Roboto,Arial,system-ui,sans-serif}
+html,body{height:100%}
+body{
+  margin:0;color:var(--text);
+  background: radial-gradient(1200px 800px at 20% 10%, #12224455, transparent),
+              radial-gradient(1200px 800px at 80% 90%, #44124455, transparent),
+              linear-gradient(135deg,var(--bg1),var(--bg2));
+}
+
+.bar{display:flex;align-items:center;gap:16px;padding:12px 16px}
+.foot{justify-content:center;color:var(--muted)}
+.brand{display:flex;flex-direction:column;gap:4px}
+.brand h1{margin:0;font-size:28px;letter-spacing:.5px}
+.subtitle{opacity:.8;font-size:13px}
+.badge{display:inline-block;color:#061015;background:var(--accent);padding:2px 8px;border-radius:999px;font-weight:800;font-size:12px;margin-bottom:4px;box-shadow:0 0 14px #00e5ff66}
+
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-left:auto}
+.control{display:flex;align-items:center;gap:8px}
+.control.small{font-size:14px}
+.control > span{opacity:.9}
+select,input[type="number"],input[type="range"]{
+  background:var(--panel); color:var(--text); border:1px solid #2a2f4a; border-radius:10px;
+}
+input[type="number"]{width:64px;padding:6px 8px}
+input[type="range"]{height:28px}
+button{
+  appearance:none;border:0;border-radius:12px;padding:10px 14px;font-weight:800;color:#0c0f1c;
+  background:var(--accent2); box-shadow: 0 10px 18px #ffc54d33, 0 2px 6px #00000055; cursor:pointer;
+}
+button:hover{filter:brightness(1.07)}
+button.accent{background:var(--accent3); box-shadow:0 10px 18px #ff6ec733}
+button.ghost{background:transparent;color:var(--text);border:1px solid #334;box-shadow:none}
+
+.grid{
+  display:grid; gap:16px; padding:16px;
+  grid-template-columns: 560px 1fr 420px;
+}
+@media (max-width: 1220px){ .grid{grid-template-columns: 1fr; } }
+
+.card{
+  background:linear-gradient(180deg,#0f1324,#0b0e1b); border:1px solid #1f2540;
+  border-radius:var(--radius); padding:14px; box-shadow:var(--shadow);
+}
+
+/* Wheel */
+.wheel-card{ position:relative; display:flex; align-items:center; justify-content:center; min-height:560px }
+.legend{ position:absolute; bottom:12px; left:16px; display:flex; gap:12px; opacity:.9; font-size:13px }
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%}
+.dot.outer{background:#94a2ff}
+.dot.inner{background:#ff9bd0}
+
+.overlay-hub{
+  position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  pointer-events:none; text-shadow:0 2px 8px #0007;
+}
+#hubMode{font-weight:900; letter-spacing:2px; font-size:16px; opacity:.9}
+#hubShift{font-weight:900; font-size:76px; line-height:1; color:var(--accent2); text-shadow:0 0 24px #ffd16655, 0 0 42px #ffd16633}
+
+/* IO */
+.io .pane {margin-bottom:10px}
+.io h3{margin:0 0 6px 0}
+textarea{
+  width:100%; min-height:120px; padding:10px 12px; border-radius:12px;
+  border:1px solid #2a2f4a; background:#0d1020; color:var(--text); resize:vertical
+}
+.buttons{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:8px}
+.mapping summary{cursor:pointer}
+.map-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:8px}
+.map-grid .pair{background:#0d1122;border:1px solid #2a2f4a;border-radius:10px;padding:6px 8px;text-align:center;font-weight:700}
+.map-grid .pair span{opacity:.85}
+
+/* Challenge */
+.challenge .title{font-weight:900; letter-spacing:.5px}
+.challenge .challenge-row{display:flex; align-items:center; margin-bottom:6px}
+.challenge .spacer{flex:1}
+.challenge .pane.trio{display:flex; gap:8px; align-items:flex-end}
+.status{margin-top:8px; min-height:24px; color:var(--muted)}
+
+/* Theme toggle pulse */
+.theme-pulse{animation: pulse 0.6s ease-out}
+@keyframes pulse{0%{box-shadow:0 0 0 0 #00e5ff77} 100%{box-shadow:0 0 0 28px transparent}}
+``
+</style>
+<link rel="icon" href="data:," />
+</head>
+<body>
+  <header class="bar">
+    <div class="brand">
+      <div class="badge">SLEUTH LAB</div>
+      <h1>Code&nbsp;Wheel</h1>
+      <span class="subtitle">Caesar &amp; Atbash • Decode like a detective</span>
+    </div>
+
+    <div class="controls">
+      <label class="control">
+        <span>Mode</span>
+        <select id="mode">
+          <option value="Caesar" selected>Caesar</option>
+          <option value="Atbash">Atbash</option>
+        </select>
+      </label>
+
+      <label class="control" id="shiftGroup">
+        <span>Shift</span>
+        <input type="range" id="shift" min="0" max="25" value="3" />
+        <input type="number" id="shiftNum" min="0" max="25" step="1" value="3" />
+      </label>
+
+      <label class="control small">
+        <input type="checkbox" id="live" checked />
+        <span>Live</span>
+      </label>
+
+      <label class="control small">
+        <input type="checkbox" id="sfx" checked />
+        <span>Sound</span>
+      </label>
+
+      <button id="audioBtn" class="ghost" title="Enable audio on iPad">Enable Sound</button>
+      <button id="themeBtn" class="ghost" title="Switch theme">Theme</button>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="card wheel-card">
+      <canvas id="wheel" width="520" height="520" aria-label="Code Wheel"></canvas>
+      <div class="overlay-hub" aria-hidden="true">
+        <div id="hubMode">CAESAR</div>
+        <div id="hubShift">03</div>
+      </div>
+      <div class="legend">
+        <div><span class="dot outer"></span>Plain</div>
+        <div><span class="dot inner"></span>Encoded</div>
+      </div>
+    </section>
+
+    <section class="card io">
+      <div class="pane">
+        <h3>Input</h3>
+        <textarea id="input" placeholder="Type a message to encrypt or paste a cipher to decrypt…"></textarea>
+      </div>
+      <div class="pane">
+        <h3>Output</h3>
+        <textarea id="output" placeholder="Result will appear here."></textarea>
+      </div>
+
+      <div class="buttons">
+        <div class="left">
+          <button id="clear" class="ghost">Clear</button>
+        </div>
+        <div class="right">
+          <button id="decrypt">Decrypt ◀</button>
+          <button id="encrypt" class="accent">Encrypt ▶</button>
+        </div>
+      </div>
+
+      <details class="mapping">
+        <summary>Show letter mappings</summary>
+        <div id="mapPairs" class="map-grid" aria-live="polite"></div>
+      </details>
+    </section>
+
+    <section class="card challenge">
+      <div class="challenge-row">
+        <div class="title">Sleuth Challenge</div>
+        <div class="spacer"></div>
+        <button id="newChal" class="ghost">New</button>
+      </div>
+      <div class="pane">
+        <h3>Ciphertext</h3>
+        <textarea id="chalCipher" readonly></textarea>
+      </div>
+      <div class="pane trio">
+        <label>Guess shift
+          <input type="number" id="chalGuess" min="0" max="25" value="0" />
+        </label>
+        <button id="chalCheck">Check</button>
+        <button id="chalReveal" class="ghost">Reveal</button>
+      </div>
+      <div id="chalStatus" class="status">Press “New” to start.</div>
+    </section>
+  </main>
+
+  <footer class="bar foot">
+    <small>Tip: drag the wheel or use ←/→ to change shift • Tap the hub to toggle 0–13 quick jumps</small>
+  </footer>
+
+  <script>
+// ---------- Elements ----------
+const canvas = document.getElementById('wheel');
+const g = canvas.getContext('2d', { alpha: true });
+const modeSel = document.getElementById('mode');
+const shiftRange = document.getElementById('shift');
+const shiftNum = document.getElementById('shiftNum');
+const shiftGroup = document.getElementById('shiftGroup');
+const hubMode = document.getElementById('hubMode');
+const hubShift = document.getElementById('hubShift');
+
+const input = document.getElementById('input');
+const output = document.getElementById('output');
+const live = document.getElementById('live');
+
+const btnEnc = document.getElementById('encrypt');
+const btnDec = document.getElementById('decrypt');
+const btnClr = document.getElementById('clear');
+
+const mapPairs = document.getElementById('mapPairs');
+
+const btnAudio = document.getElementById('audioBtn');
+const sfx = document.getElementById('sfx');
+const btnTheme = document.getElementById('themeBtn');
+
+// Challenge
+const chalCipher = document.getElementById('chalCipher');
+const chalGuess = document.getElementById('chalGuess');
+const chalNew = document.getElementById('newChal');
+const chalCheck = document.getElementById('chalCheck');
+const chalReveal = document.getElementById('chalReveal');
+const chalStatus = document.getElementById('chalStatus');
+
+// ---------- State ----------
+const ALPHA = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'];
+let shift = 3;
+let currentAngle = angleForShift(shift);
+let targetAngle  = currentAngle;
+let dragging = false;
+let quickToggle = false; // tap hub to toggle 0<->13 as a teaching shortcut
+let challenge = { plain:'', shift:0 };
+
+// ---------- Audio (WebAudio beeps; no external files) ----------
+let audioCtx = null;
+function enableAudio(){
+  if (!audioCtx){
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    audioCtx = Ctx ? new Ctx() : null;
+  }
+}
+btnAudio.addEventListener('click', ()=>{ enableAudio(); blip(500,0.06,0.25); });
+function blip(freq=880, dur=0.05, gain=0.18){
+  if (!sfx.checked || !audioCtx) return;
+  const t = audioCtx.currentTime;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'square'; o.frequency.value = freq;
+  g.gain.setValueAtTime(gain, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g).connect(audioCtx.destination);
+  o.start(); o.stop(t + dur);
+}
+
+// ---------- Utilities ----------
+function angleForShift(s){ return -(2*Math.PI*(s%26))/26; }
+function clamp(n,min,max){ return n<min?min: n>max?max: n; }
+
+function atbash(s){
+  return s.replace(/[A-Za-z]/g, ch=>{
+    const base = ch <= 'Z' ? 65 : 97;
+    const off = ch.charCodeAt(0) - base;
+    return String.fromCharCode(base + (25-off));
+  });
+}
+function caesar(s,k){
+  k=((k%26)+26)%26;
+  return s.replace(/[A-Za-z]/g, ch=>{
+    const base = ch <= 'Z' ? 65 : 97;
+    return String.fromCharCode(base + ((ch.charCodeAt(0)-base + k) % 26));
+  });
+}
+function transform(txt, decrypt=false){
+  if (modeSel.value === 'Atbash') return atbash(txt);
+  const k = decrypt ? ((26 - (shift%26))%26) : shift;
+  return caesar(txt, k);
+}
+
+// ---------- Draw ----------
+function draw(){
+  const w = canvas.width, h = canvas.height;
+  const cx = w/2, cy = h/2;
+  g.clearRect(0,0,w,h);
+
+  // Glow halo
+  for(let i=0;i<22;i++){
+    const a = 0.06*(1-i/22);
+    g.strokeStyle = `rgba(0,229,255,${a})`;
+    g.lineWidth = 12;
+    g.beginPath();
+    g.ellipse(cx,cy,w-28+i*8,h-28+i*8,0,0,Math.PI*2);
+    g.stroke();
+  }
+
+  const size = Math.min(w,h)-40;
+  const outerR = size/2, innerR = size*0.82/2, hubR = size*0.18/2;
+
+  // Outer ring
+  fillCircle(cx,cy, outerR, '#0c1122');
+  strokeCircle(cx,cy, outerR, '#00e5ff', 3);
+
+  // Tick marks (like a safe dial)
+  const step = 2*Math.PI/26;
+  for(let i=0;i<26;i++){
+    const ang = -Math.PI/2 + i*step;
+    const r1 = outerR - 10;
+    const r2 = r1 - (i%5===0 ? 16 : 10);
+    g.strokeStyle = i%5===0 ? '#7aa8ff' : '#3a436a';
+    g.lineWidth = i%5===0 ? 2.5 : 1.2;
+    g.beginPath();
+    g.moveTo(cx+Math.cos(ang)*r1, cy+Math.sin(ang)*r1);
+    g.lineTo(cx+Math.cos(ang)*r2, cy+Math.sin(ang)*r2);
+    g.stroke();
+  }
+
+  // Outer alphabet (plain)
+  drawAlphabet(cx, cy, outerR-38, 0, ALPHA, '#cfd7ff', true);
+
+  // Inner ring
+  fillCircle(cx,cy, innerR, '#141a33');
+  strokeCircle(cx,cy, innerR, '#ff9bd0', 2);
+
+  if (modeSel.value === 'Caesar'){
+    drawAlphabet(cx, cy, innerR-26, currentAngle, ALPHA, '#ff9bd0', false);
+    drawMappingRays(cx, cy, outerR, innerR, currentAngle, '#58e1ff');
+  } else {
+    const rev = [...ALPHA].reverse();
+    drawAlphabet(cx, cy, innerR-26, 0, rev, '#ff9bd0', false);
+    drawAtbashRays(cx, cy, outerR, innerR, '#ff9bd0');
+  }
+
+  // Hub
+  fillCircle(cx,cy, hubR, 'rgba(255,209,102,0.18)');
+  strokeCircle(cx,cy, hubR, '#ffd166', 2.6);
+}
+function fillCircle(x,y,r,c){ g.fillStyle=c; g.beginPath(); g.arc(x,y,r,0,Math.PI*2); g.fill(); }
+function strokeCircle(x,y,r,c,w){ g.strokeStyle=c; g.lineWidth=w; g.beginPath(); g.arc(x,y,r,0,Math.PI*2); g.stroke(); }
+function drawAlphabet(cx,cy,r,rot,alphabet,color,outer){
+  g.save(); g.fillStyle=color; g.font='bold 19px Segoe UI, Inter, sans-serif';
+  const step = 2*Math.PI/alphabet.length;
+  for(let i=0;i<alphabet.length;i++){
+    const ang = -Math.PI/2 + i*step + rot;
+    const x = cx + Math.cos(ang)*r;
+    const y = cy + Math.sin(ang)*r;
+    g.save();
+    g.translate(x,y);
+    g.rotate(ang + Math.PI/2);
+    g.fillText(alphabet[i], -6, outer? -10 : 12);
+    g.restore();
+  }
+  g.restore();
+}
+function drawMappingRays(cx, cy, outerR, innerR, rot, color){
+  g.save();
+  g.strokeStyle = color; g.globalAlpha = .65; g.lineWidth = 1.4;
+  const sample = [0,2,5,7,10,13,18,21,25];
+  const step = 2*Math.PI/26;
+  const r1= outerR-60, r2 = innerR-50;
+  for(const idx of sample){
+    const ao = -Math.PI/2 + idx*step;
+    const ai = -Math.PI/2 + idx*step + rot;
+    g.beginPath();
+    g.moveTo(cx+Math.cos(ao)*r1, cy+Math.sin(ao)*r1);
+    g.lineTo(cx+Math.cos(ai)*r2, cy+Math.sin(ai)*r2);
+    g.stroke();
+  }
+  g.restore();
+}
+function drawAtbashRays(cx, cy, outerR, innerR, color){
+  g.save();
+  g.strokeStyle = color; g.globalAlpha = .7; g.lineWidth = 1.4;
+  const sample = [0,3,6,9,12,15,18,21,25];
+  const step = 2*Math.PI/26;
+  const r1= outerR-60, r2 = innerR-50;
+  for(const idx of sample){
+    const ao = -Math.PI/2 + idx*step;
+    const ai = -Math.PI/2 + (25-idx)*step;
+    g.beginPath();
+    g.moveTo(cx+Math.cos(ao)*r1, cy+Math.sin(ao)*r1);
+    g.lineTo(cx+Math.cos(ai)*r2, cy+Math.sin(ai)*r2);
+    g.stroke();
+  }
+  g.restore();
+}
+
+// ---------- Animation loop ----------
+function animate(){
+  const diff = targetAngle - currentAngle;
+  if (Math.abs(diff) > 0.001){
+    currentAngle += diff * 0.18;
+    if (sfx.checked) blip(1000, 0.02, 0.09);
+  }
+  draw();
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+
+// ---------- Interaction ----------
+function syncShift(newShift, play=true){
+  shift = clamp(parseInt(newShift||0,10), 0, 25);
+  shiftRange.value = shift; shiftNum.value = shift;
+  hubShift.textContent = (shift<10?'0':'') + shift;
+  if (modeSel.value === 'Caesar'){
+    targetAngle = angleForShift(shift);
+    if (play && sfx.checked) blip(600+shift*10, 0.02, 0.12);
+  }
+  updatePairs();
+  if (live.checked) output.value = transform(input.value,false);
+}
+modeSel.addEventListener('change', ()=>{
+  const isC = (modeSel.value==='Caesar');
+  shiftGroup.style.display = isC ? 'inline-flex' : 'none';
+  hubMode.textContent = isC ? 'CAESAR' : 'ATBASH';
+  if (!isC) { targetAngle = 0; }
+  if (sfx.checked) blip(350,0.04,0.25);
+  updatePairs();
+});
+shiftRange.addEventListener('input', e=> syncShift(e.target.value));
+shiftNum.addEventListener('input', e=> syncShift(e.target.value));
+
+// Drag to rotate (touch + mouse)
+canvas.addEventListener('pointerdown', e=> { dragging=true; canvas.setPointerCapture(e.pointerId); });
+window.addEventListener('pointerup',   e=> dragging=false);
+canvas.addEventListener('pointermove', e=>{
+  if (!dragging || modeSel.value!=='Caesar') return;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left, y = e.clientY - rect.top;
+  const cx = canvas.width/2, cy = canvas.height/2;
+  const ang = Math.atan2(y-cy, x-cx);
+  const s = Math.round(-ang * 26 / (2*Math.PI));
+  syncShift(((s%26)+26)%26, false);
+});
+
+// Hub tap: toggle between 0 and 13 (dramatic!)
+canvas.addEventListener('click', e=>{
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left, y = e.clientY - rect.top;
+  const cx = canvas.width/2, cy = canvas.height/2;
+  const dx = x - cx, dy = y - cy;
+  const r = Math.sqrt(dx*dx+dy*dy);
+  if (r < (Math.min(canvas.width, canvas.height)-40)*0.18/2 + 16){
+    quickToggle = !quickToggle;
+    syncShift(quickToggle?13:0);
+  }
+});
+
+// Keyboard nudges
+window.addEventListener('keydown', e=>{
+  if (modeSel.value!=='Caesar') return;
+  if (e.key==='ArrowLeft'){ syncShift(shift-1); }
+  if (e.key==='ArrowRight'){ syncShift(shift+1); }
+});
+
+// Transform buttons
+btnEnc.addEventListener('click', ()=> { if (sfx.checked) blip(800,0.05,0.22); output.value = transform(input.value,false); });
+btnDec.addEventListener('click', ()=> { if (sfx.checked) blip(420,0.05,0.22); output.value = transform(input.value,true); });
+btnClr.addEventListener('click', ()=> { input.value=''; output.value=''; if (sfx.checked) blip(220,0.03,0.18); });
+input.addEventListener('input', ()=> { if (live.checked) output.value = transform(input.value,false); });
+
+// Mapping grid
+function updatePairs(){
+  const pairs = [];
+  if (modeSel.value==='Atbash'){
+    for (let i=0;i<26;i++) pairs.push([ALPHA[i], ALPHA[25-i]]);
+  } else {
+    for (let i=0;i<26;i++){
+      const enc = ALPHA[(i+shift)%26];
+      pairs.push([ALPHA[i], enc]);
+    }
+  }
+  mapPairs.innerHTML = pairs.map(([a,b])=>`<div class="pair"><span>${a}</span> → <span>${b}</span></div>`).join('');
+}
+updatePairs();
+
+// Theme toggle (Neon ↔ Pastel)
+btnTheme.addEventListener('click', ()=>{
+  document.body.classList.toggle('theme-pulse');
+  const root = document.documentElement.style;
+  if (!btnTheme.dataset.alt){
+    btnTheme.dataset.alt = '1';
+    root.setProperty('--accent','#9BE7FF');
+    root.setProperty('--accent2','#8BE06E');
+    root.setProperty('--accent3','#8F7CFF');
+    root.setProperty('--bg1','#f6f0ff'); root.setProperty('--bg2','#e8f6ff');
+    root.setProperty('--card','#ffffff'); root.setProperty('--panel','#f6f7ff');
+    root.setProperty('--text','#23243a'); root.setProperty('--muted','#4a4f73');
+  } else {
+    delete btnTheme.dataset.alt;
+    root.cssText = ''; // back to defaults
+  }
+});
+
+// Challenge mode
+const PHRASES = [
+  "TEAMWORK AND KINDNESS MAKE US STRONG",
+  "CURIOUS MINDS SOLVE TRICKY PUZZLES",
+  "STAY BRAVE KEEP LEARNING EVERY DAY",
+  "MATH AND CIPHERS ARE A SUPERPOWER",
+  "SMALL STEPS CREATE BIG CHANGES",
+  "YOU CAN DO HARD THINGS WITH PRACTICE",
+  "ENGINEERING IS PROBLEM SOLVING MAGIC",
+  "SCIENCE IS JUST CURIOUS QUESTIONS",
+  "BUILD CREATE CODE AND COLLABORATE"
+];
+function newChallenge(){
+  const p = PHRASES[Math.floor(Math.random()*PHRASES.length)];
+  const k = Math.floor(Math.random()*26);
+  challenge = { plain:p, shift:k };
+  chalCipher.value = caesar(p, k);
+  chalGuess.value = 0; chalStatus.textContent = "Guess the shift and decode it!";
+  // auto-set wheel for teaching
+  modeSel.value = 'Caesar';
+  hubMode.textContent = 'CAESAR';
+  shiftGroup.style.display = 'inline-flex';
+  syncShift(k, false);
+}
+function checkChallenge(){
+  const guess = clamp(parseInt(chalGuess.value||0,10),0,25);
+  if (guess === challenge.shift){
+    chalStatus.textContent = `✅ Correct! Shift ${guess}. Decoded: “${caesar(chalCipher.value,(26-guess)%26)}”.`;
+    if (sfx.checked) blip(880,0.08,0.25);
+  } else {
+    chalStatus.textContent = `⚠ Not yet. Try rotating the wheel until letters line up.`;
+    if (sfx.checked) blip(200,0.06,0.25);
+  }
+}
+chalNew.addEventListener('click', newChallenge);
+chalCheck.addEventListener('click', checkChallenge);
+chalReveal.addEventListener('click', ()=>{
+  chalStatus.textContent = `🔎 Answer — Shift ${challenge.shift}. Plain: “${challenge.plain}”.`;
+});
+newChallenge(); // start one
+
+// Initial sync
+syncShift(shift, false);
+draw();
+``
+</script>
+</body>
+</html>
+``

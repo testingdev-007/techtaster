@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jazzy Countdown — Hero Timer</title>
+  <style>
+/* ========= THEME ========= */
+:root{
+  --bg:#0b0e1a;
+  --panel:#121735;
+  --accent:#ff3cac;
+  --accent2:#784ba0;
+  --accent3:#2b86c5;
+  --text:#e9eef7;
+  --muted:#9fb2d1;
+  --good:#a9ffea;
+  --warn:#ffd166;
+  --danger:#ff5468;
+
+  /* Hero sizing: the timer takes most of the viewport height */
+  --hero-size: min(76vh, 92vw);
+  --digit-size: clamp(72px, 0.24*var(--hero-size), 220px);
+  --stroke: clamp(10px, 0.04*var(--hero-size), 20px);
+}
+
+html, body { height: 100% }
+body{
+  margin:0;
+  color:var(--text);
+  background: radial-gradient(1200px 700px at 70% -10%, #1a1f4b 0%, var(--bg) 60%) fixed;
+  font-family: ui-rounded, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  display:flex; flex-direction:column; align-items:center;
+}
+
+.container{
+  width:min(1100px, 96vw);
+  display:flex; flex-direction:column; gap:22px;
+  padding:18px 0 32px;
+}
+
+header{ padding:8px 12px 0; }
+h1{
+  margin:0 0 6px; font-weight:800; letter-spacing:.2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2), var(--accent3));
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+.subtitle{ color:var(--muted); margin:0 }
+
+/* ========= HERO TIMER ========= */
+.hero{ display:grid; place-items:center; width:100%; }
+.hero-stage{ position:relative; width:var(--hero-size); height:var(--hero-size); margin-inline:auto; }
+.ring{ width:100%; height:100%; }
+.time{
+  position:absolute; inset:0; display:grid; place-items:center; text-align:center; user-select:none;
+}
+.pill{
+  position:absolute; top:10%; left:50%; transform:translateX(-50%);
+  display:inline-flex; align-items:center; gap:8px;
+  padding:8px 14px; border-radius:999px; font-size:1rem;
+  background:rgba(255,255,255,.06); border:1px solid #2a3472; color:#bcd1ff;
+}
+.time h2{
+  font-size:var(--digit-size); line-height:1; margin:0; font-weight:900; letter-spacing:.5px;
+  text-shadow: 0 4px 24px rgba(0,0,0,.35);
+}
+.status{
+  position:absolute; bottom:10%; left:50%; transform:translateX(-50%);
+  color:var(--muted); letter-spacing:.12em; font-size:1.05rem;
+}
+
+/* ========= CONTROLS (BELOW HERO) ========= */
+.controls{
+  background: linear-gradient(180deg, #121735 0, #10142e 100%);
+  border:1px solid #1c2352; border-radius:14px; padding:18px; display:grid; gap:16px;
+}
+.inputs{
+  display:grid; gap:12px; grid-template-columns: repeat(4, minmax(0, 1
+</style>
+</head>
+<body>
+  <canvas id="confetti"></canvas>
+
+  <div class="container">
+    <header>
+      <h1>Timer</h1>
+      
+    </header>
+
+    <!-- ======== HERO TIMER ======== -->
+    <section class="hero" aria-label="Countdown timer">
+      <div class="hero-stage">
+        <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+          <defs>
+            <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#ff3cac"/>
+              <stop offset="50%" stop-color="#784ba0"/>
+              <stop offset="100%" stop-color="#2b86c5"/>
+            </linearGradient>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="1.6" result="colored" />
+              <feMerge><feMergeNode in="colored"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <!-- Track -->
+          <circle cx="60" cy="60" r="50" stroke="#1f2557" fill="none" stroke-width="12" />
+          <!-- Progress -->
+          <circle id="progress" cx="60" cy="60" r="50"
+            stroke="url(#grad)" fill="none" stroke-linecap="round"
+            stroke-width="12" stroke-dasharray="314.159265" stroke-dashoffset="0"
+            style="filter:url(#glow); transform:rotate(-90deg); transform-origin:60px 60px;" />
+        </svg>
+
+        <div class="time">
+          <div class="pill" id="statePill">Idle</div>
+          <h2 id="timeTxt" aria-live="polite">01:30</h2>
+          <div class="status"><small id="auxTxt">Select a WAV/M4A/OGA file or paste an audio URL</small></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======== CONTROLS BELOW ======== -->
+    <section class="controls" aria-label="Timer controls">
+      <div class="inputs">
+
+        <div class="form-group">
+          <label for="minutes">Minutes</label>
+          <input id="minutes" type="number" min="0" max="999" value="1" inputmode="numeric" />
+        </div>
+
+        <div class="form-group">
+          <label for="seconds">Seconds</label>
+          <input id="seconds" type="number" min="0" max="59" value="30" inputmode="numeric" />
+        </div>
+
+        <div class="form-group">
+          <label for="audioFile">Audio file (WAV / M4A / OGA)</label>
+          <input id="audioFile" type="file"
+                 accept=".wav,audio/wav,audio/x-wav,.m4a,audio/mp4,audio/aac,.oga,audio/ogg" />
+        </div>
+
+        <div class="form-group">
+          <label for="audioUrl">or Audio URL (.wav / .m4a / .oga)</label>
+          <input id="audioUrl" type="url" placeholder="https://example.com/loop.m4a" />
+        </div>
+
+        <!-- Tick-only toggle -->
+        <div class="form-group tickonly-group">
+          <label class="tickonly-label">
+            <input id="tickOnly" type="checkbox" />
+            Use the built‑in tick sound for the entire countdown (no background audio)
+          </label>
+          <small class="note">If enabled, the app plays a short tick every second and won’t load your audio.</small>
+        </div>
+
+        <!-- Volume (full row) -->
+        <div class="form-group volume-group">
+          <label for="volume" class="vol-label">Volume</label>
+          <div class="volume-row">
+            <input id="volume" type="range" min="0" max="1" step="0.01" value="1" aria-label="Volume (0 to 100 percent)">
+            <span class="vol-value" id="volumeVal">100%</span>
+            <span class="note">Adjusts loop and tick volumes.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="btns">
+        <button id="startBtn">▶ Start</button>
+        <button id="pauseBtn" class="secondary" disabled>⏸ Pause</button>
+        <button id="resetBtn" class="ghost" disabled>⟲ Reset</button>
+        <button id="fsBtn" class="ghost">⛶ Full Screen</button>
+      </div>
+
+      <div class="presets" aria-label="Presets">
+        <span class="preset" data-min="0" data-sec="30">00:30</span>
+        <span class="preset" data-min="1" data-sec="00">01:00</span>
+        <span class="preset" data-min="2" data-sec="00">02:00</span>
+        <span class="preset" data-min="3" data-sec="00">03:00</span>
+        <span class="preset" data-min="5" data-sec="00">05:00</span>
+        <span class="preset" data-min="10" data-sec="00">10:00</span>
+      </div>
+
+      <p class="note">
+        Tip: Trim silence in your audio for seamless looping. Browser support varies:
+        <strong>M4A/AAC</strong> great on Safari/iOS, <strong>WAV</strong> universal, <strong>OGA/Ogg</strong> best on Chromium/Firefox.
+      </p>
+      <p class="note warn" id="typeWarn" hidden>Selected file type isn’t WAV/M4A/OGA — it may not play.</p>
+    </section>
+  </div>
+
+  <script>
+(() => {
+  // ===== Elements =====
+  const minutesEl = document.getElementById('minutes');
+  const secondsEl = document.getElementById('seconds');
+  const audioFileEl = document.getElementById('audioFile');
+  const audioUrlEl  = document.getElementById('audioUrl');
+  const tickOnlyEl  = document.getElementById('tickOnly');
+
+  const volumeEl = document.getElementById('volume');
+  const volumeValEl = document.getElementById('volumeVal');
+
+  const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const fsBtn    = document.getElementById('fsBtn');
+
+  const progressEl = document.getElementById('progress');
+  const timeTxt = document.getElementById('timeTxt');
+  const statePill = document.getElementById('statePill');
+  const auxTxt = document.getElementById('auxTxt');
+  const typeWarn = document.getElementById('typeWarn');
+  const confettiCanvas = document.getElementById('confetti');
+
+  // Presets
+  Array.from(document.querySelectorAll('.preset')).forEach(p =>
+    p.addEventListener('click', () => {
+      minutesEl.value = p.dataset.min;
+      secondsEl.value = p.dataset.sec;
+      reset();
+    })
+  );
+
+  // Match ring thickness to --stroke (cosmetic)
+  const rootStyles = getComputedStyle(document.documentElement);
+  const strokeCss = rootStyles.getPropertyValue('--stroke').trim();
+  if (strokeCss) {
+    const strokeNum = parseFloat(strokeCss);
+    if (!Number.isNaN(strokeNum)) {
+      progressEl.setAttribute('stroke-width', strokeNum);
+      progressEl.previousElementSibling.setAttribute('stroke-width', strokeNum);
+    }
+  }
+
+  // ===== Timer State =====
+  let durationMs = toMs(parseInt(minutesEl.value||0), parseInt(secondsEl.value||0));
+  let startTime = null;
+  let remainingMs = durationMs;
+  let rafId = null;
+  let running = false;
+
+  // ===== Audio =====
+  const audio = new Audio();
+  audio.loop = true;
+  audio.preload = 'auto';
+  audio.crossOrigin = 'anonymous';
+
+  // Volume state
+  let userVolume = parseFloat(localStorage.getItem('jazzyVol') || '1');
+  if (Number.isNaN(userVolume)) userVolume = 1;
+  userVolume = Math.min(1, Math.max(0, userVolume));
+  volumeEl.value = userVolume.toFixed(2);
+  volumeValEl.textContent = Math.round(userVolume*100) + '%';
+  audio.volume = userVolume;
+
+  // WebAudio tick (used for final 10s AND for tick-only mode)
+  let audioCtx = null;
+  function tick() {
+    try{
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880; // A5
+      const now = audioCtx.currentTime;
+      const peak = 0.08 * userVolume; // scale with slider
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(now); osc.stop(now + 0.16);
+    }catch(e){}
+  }
+
+  // ===== Helpers =====
+  function toMs(m,s){ return Math.max(0, (m*60 + s)*1000); }
+  function format(ms){
+    const t = Math.max(0, Math.round(ms/1000));
+    const M = Math.floor(t/60).toString().padStart(2,'0');
+    const S = (t%60).toString().padStart(2,'0');
+    return `${M}:${S}`;
+  }
+  function circumference(){ return 2*Math.PI*50; }
+  function dashOffset(ms){
+    const C = circumference();
+    const p = 1 - (ms / durationMs);
+    return Math.min(C, Math.max(0, p*C));
+  }
+  function setState(text, color){
+    statePill.textContent = text;
+    statePill.style.color = color || '#bcd1ff';
+  }
+  function enableControls(isRunning){
+    startBtn.disabled = isRunning;
+    pauseBtn.disabled = !isRunning;
+    resetBtn.disabled = !isRunning && remainingMs === durationMs;
+  }
+
+  // Accept WAV/M4A/OGA by extension or MIME (for local files)
+  const okExt = new Set(['wav','m4a','oga']);
+  const okMime = new Set([
+    'audio/wav','audio/x-wav','audio/mp4','audio/aac','audio/ogg',
+    'audio/wave','audio/vnd.wave'
+  ]);
+
+  function looksSupportedFile(file){
+    if (!file) return true;
+    const name = (file.name||'').toLowerCase();
+    const ext = name.split('.').pop();
+    if (okExt.has(ext)) return true;
+    if (file.type && okMime.has(file.type)) return true;
+    return false;
+  }
+
+  audioFileEl.addEventListener('change', () => {
+    typeWarn.hidden = looksSupportedFile(audioFileEl.files && audioFileEl.files[0]);
+  });
+
+  function pickAudioSource(){
+    // If tick-only, never attach a media source
+    if (tickOnlyEl.checked) {
+      audio.removeAttribute('src');
+      typeWarn.hidden = true;
+      return 'none';
+    }
+    // Local file
+    if (audioFileEl.files && audioFileEl.files[0]) {
+      const f = audioFileEl.files[0];
+      typeWarn.hidden = looksSupportedFile(f);
+      const blobUrl = URL.createObjectURL(f);
+      audio.src = blobUrl;
+      return 'file';
+    }
+    // URL
+    const url = (audioUrlEl.value || '').trim();
+    if (url){
+      const lowered = url.toLowerCase();
+      const ext = lowered.split('?')[0].split('#')[0].split('.').pop();
+      typeWarn.hidden = okExt.has(ext);
+      audio.src = url;
+      return 'url';
+    }
+    // No audio
+    audio.removeAttribute('src');
+    typeWarn.hidden = true;
+    return 'none';
+  }
+
+  // ===== Volume handling =====
+  function applyVolume(v){
+    userVolume = Math.min(1, Math.max(0, v));
+    audio.volume = userVolume;
+    volumeValEl.textContent = Math.round(userVolume*100) + '%';
+    try { localStorage.setItem('jazzyVol', String(userVolume)); } catch {}
+  }
+  volumeEl.addEventListener('input', (e) => applyVolume(parseFloat(e.target.value||'1')));
+
+  // ===== Render Loop =====
+  let lastTickSecond = null;
+  let loopStoppedForFinal = false;
+
+  function step(now){
+    if (!running){ cancelAnimationFrame(rafId); return; }
+    if (startTime === null) startTime = now;
+    const elapsed = now - startTime;
+    remainingMs = Math.max(0, durationMs - elapsed);
+
+    const secs = Math.ceil(remainingMs/1000);
+
+    // a) Tick-only mode: tick every second for entire countdown
+    if (tickOnlyEl.checked) {
+      if (lastTickSecond !== secs) { tick(); lastTickSecond = secs; }
+      auxTxt.textContent = remainingMs <= 0 ? 'Time!' : 'Ticking…';
+    } else {
+      // b) Normal mode: looped audio until final 10s, then stop loop and tick
+      if (remainingMs <= 10_000 && !loopStoppedForFinal) {
+        try { audio.pause(); audio.currentTime = 0; } catch(e){}
+        loopStoppedForFinal = true; // prevent repeated pauses
+      }
+      if (remainingMs <= 10_000) {
+        if (lastTickSecond !== secs) { tick(); lastTickSecond = secs; }
+        auxTxt.textContent = secs <= 0 ? 'Time!' : `Final ${secs}…`;
+      } else {
+        auxTxt.textContent = 'Running…';
+      }
+    }
+
+    timeTxt.textContent = format(remainingMs);
+    progressEl.setAttribute('stroke-dashoffset', dashOffset(remainingMs));
+
+    if (remainingMs <= 0){ finish(); return; }
+    rafId = requestAnimationFrame(step);
+  }
+
+  function finish(){
+    running = false; enableControls(false);
+    setState('Done', getComputedStyle(document.documentElement).getPropertyValue('--good').trim() || '#a9ffea');
+    auxTxt.textContent = 'Nice! Take a breather.';
+    timeTxt.textContent = format(0);
+    progressEl.setAttribute('stroke-dashoffset', dashOffset(0));
+    try { audio.pause(); } catch(e){}
+    burstConfetti();
+  }
+
+  function reset(){
+    running = false; cancelAnimationFrame(rafId);
+    startTime = null; lastTickSecond = null; loopStoppedForFinal = false;
+    durationMs = toMs(+minutesEl.value||0, +secondsEl.value||0);
+    remainingMs = durationMs;
+    timeTxt.textContent = format(durationMs);
+    progressEl.setAttribute('stroke-dashoffset', dashOffset(durationMs));
+    setState('Idle');
+    auxTxt.textContent = tickOnlyEl.checked
+      ? 'Tick‑only mode enabled.'
+      : 'Select a WAV/M4A/OGA file or paste an audio URL';
+    enableControls(false);
+    try { audio.pause(); audio.currentTime = 0; } catch(e){}
+  }
+
+  // Keep accurate after tab switches
+  document.addEventListener('visibilitychange', () => {
+    if (!running) return;
+    if (document.visibilityState === 'visible' && startTime !== null) {
+      startTime = performance.now() - (durationMs - remainingMs);
+    }
+  });
+
+  minutesEl.addEventListener('change', reset);
+  secondsEl.addEventListener('change', reset);
+  tickOnlyEl.addEventListener('change', reset);
+
+  startBtn.addEventListener('click', async () => {
+    // Clamp
+    const m = Math.max(0, Math.min(999, parseInt(minutesEl.value||0)));
+    const s = Math.max(0, Math.min(59,  parseInt(secondsEl.value||0)));
+    minutesEl.value = m; secondsEl.value = s;
+    durationMs = toMs(m, s);
+    if (durationMs === 0){ auxTxt.textContent = 'Please set a duration > 0'; return; }
+
+    // Audio (skip if tick-only)
+    const srcType = pickAudioSource();
+    audio.volume = userVolume; // ensure slider value is applied
+    if (srcType !== 'none'){
+      try { await audio.play(); auxTxt.textContent = 'Looping audio…'; }
+      catch { auxTxt.textContent = 'Tap Start again to allow audio (autoplay blocked).'; }
+    } else if (tickOnlyEl.checked) {
+      auxTxt.textContent = 'Tick‑only mode enabled.';
+    } else {
+      auxTxt.textContent = 'Silent mode (no audio selected).';
+    }
+
+    if (!audioCtx) {
+      try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); await audioCtx.resume(); }
+      catch {}
+    }
+
+    running = true; setState('Running', '#d0f0ff'); enableControls(true);
+    startTime = performance.now();
+    rafId = requestAnimationFrame(step);
+  });
+
+  pauseBtn.addEventListener('click', () => {
+    if (!running) return;
+    running = false; cancelAnimationFrame(rafId);
+    setState('Paused', '#ffd166'); enableControls(false);
+    try { audio.pause(); } catch(e){}
+  });
+
+  resetBtn.addEventListener('click', reset);
+
+  // Full screen toggle
+  fsBtn.addEventListener('click', async () => {
+    const hero = document.querySelector('.hero-stage');
+    if (!document.fullscreenElement){
+      try { await hero.requestFullscreen(); } catch {}
+    } else {
+      try { await document.exitFullscreen(); } catch {}
+    }
+  });
+
+  // Init
+  reset();
+
+  // ===== Confetti (lightweight) =====
+  const ctx = confettiCanvas.getContext('2d');
+  let confettis = [];
+  function burstConfetti(){
+    const w = confettiCanvas.width = window.innerWidth;
+    const h = confettiCanvas.height = window.innerHeight;
+    confettis = Array.from({length: 140}, () => ({
+      x: Math.random()*w,
+      y: -20 - Math.random()*h*0.3,
+      r: 3+Math.random()*5,
+      c: ['#ff3cac','#ffd166','#2b86c5','#a9ffea','#ff5468'][Math.floor(Math.random()*5)],
+      vx: -2+Math.random()*4,
+      vy: 1+Math.random()*3,
+      rot: Math.random()*360,
+      vr: -4 + Math.random()*8
+    }));
+    requestAnimationFrame(renderConfetti);
+    setTimeout(() => confettis = [], 2400);
+  }
+  function renderConfetti(){
+    const w = confettiCanvas.width, h = confettiCanvas.height;
+    ctx.clearRect(0,0,w,h);
+    confettis.forEach(p=>{
+      p.x+=p.vx; p.y+=p.vy; p.rot+=p.vr;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot*Math.PI/180);
+      ctx.fillStyle = p.c; ctx.fillRect(-p.r, -p.r, p.r*2, p.r*2);
+      ctx.restore();
+    });
+    if (confettis.length) requestAnimationFrame(renderConfetti);
+  }
+})();
+</script>
+</body>
+</html>

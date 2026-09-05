@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Logic Grid — Dark Theme (Auto-fit Columns)</title>
+  <style>
+    :root{
+      --bg:#0b0f10; --grid:#0f1518; --accent:#00ff88; --text:#c7ffdf; --muted:#6affb2; --line:#1f2a2f; --tick:#20e37a; --cross:#ff5c7a; --focus:#1b7f57; --shadow: 0 10px 30px rgba(0,0,0,.45);
+      --cell-x-pad: 22px;            /* horizontal padding inside cells */
+      --min-col-w: 90px;             /* safety minimum for narrow items */
+      --min-rowkey-w: 160px;         /* safety minimum for row labels */
+    }
+    html,body{height:100%}
+    body{margin:0;font-family:system-ui, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji",sans-serif;background:radial-gradient(1200px 800px at 15% 0%, #091114 0%, var(--bg) 55%) fixed;color:var(--text)}
+    header{padding:22px 16px 10px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+    .title{font-weight:700;font-size:1.2rem;color:var(--accent);text-shadow:0 0 12px rgba(0,255,136,.28)}
+    .subtitle{opacity:.85}
+    .wrap{max-width:1300px;margin:0 auto;padding:0 12px 28px}
+    .controls{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 6px}
+    button{background:linear-gradient(180deg,#0f1b1f 0%,#0c1418 100%);color:var(--text);border:1px solid #193138;padding:8px 12px;border-radius:10px;font-weight:600;cursor:pointer;box-shadow:var(--shadow);transition:.18s ease}
+    button:hover{border-color:var(--accent);transform:translateY(-1px)}
+
+    .layout{display:grid;grid-template-columns: 1fr 1fr;gap:14px;align-items:start}
+    .left-stack{display:grid;grid-template-rows: auto auto;gap:14px}
+
+    .card{background:linear-gradient(180deg,#0e1518 0%,#0b1114 100%);border:1px solid #142026;border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+    .card h3{margin:0;padding:10px 12px;font-size:.95rem;background:linear-gradient(180deg,#0d181b 0%,#0a1216 100%);border-bottom:1px solid #152228;color:var(--muted)}
+
+    .table-scroll{overflow:auto; /* allow scrolling if extremely wide */}
+
+    .grid{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;background:var(--grid)}
+    .grid th,.grid td{border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+    .grid th{position:sticky;top:0;background:#0e171a;font-weight:600;font-size:.9rem;color:#b8ffe1;padding:8px;z-index:1;white-space:nowrap}
+    .rowkey{background:#0d1619;color:#9cffd1;font-weight:600;text-align:left;position:sticky;left:0;z-index:2;padding:8px;white-space:nowrap}
+    .grid td{height:44px;text-align:center;vertical-align:middle;color:var(--text);background:linear-gradient(180deg,#0a1113 0%,#0a1214 100%);user-select:none;cursor:pointer;font-size:1.1rem;white-space:nowrap}
+    .grid td[data-state="tick"]{color:var(--tick);text-shadow:0 0 8px rgba(32,227,122,.35)}
+    .grid td[data-state="cross"]{color:var(--cross);text-shadow:0 0 6px rgba(255,92,122,.25)}
+
+    .legend{display:flex;align-items:center;gap:10px;margin:6px 0 0 2px;font-size:.9rem;opacity:.95}
+    .swatch{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:6px;border:1px solid var(--line)}
+    .swatch.tick{color:var(--tick);background:#0f1719}
+    .swatch.cross{color:var(--cross);background:#0f1315}
+
+    .slider{display:flex;align-items:center;gap:8px;margin-left:auto}
+    input[type="range"]{accent-color:#19f09a}
+
+    @media (max-width: 860px){ .layout{grid-template-columns: 1fr} }
+  </style>
+</head>
+<body>
+  <header class="wrap">
+    <div class="title">Logic Grid (Auto-fit to show full text)</div>
+    <div class="subtitle">Columns auto-size from content; horizontal scroll appears only if truly necessary.</div>
+    <div class="controls">
+      <button id="clearAllBtn">Clear all</button>
+      <button id="exportBtn">Export JSON</button>
+      <input id="importInput" type="file" accept="application/json" hidden />
+      <button id="importBtn">Import JSON</button>
+      <div class="slider" title="Zoom">
+        <span style="opacity:.8">Zoom</span>
+        <input id="zoom" type="range" min="90" max="140" step="5" value="100" />
+      </div>
+    </div>
+    <div class="legend">Legend: <span class="swatch tick">✓</span> Tick <span class="swatch cross">✗</span> Cross</div>
+  </header>
+
+  <main class="wrap">
+    <section class="layout">
+      <div class="left-stack">
+        <div class="card"><h3>Attack Type × Defender</h3><div class="table-scroll" id="grid_ATxDEF"></div></div>
+        <div class="card"><h3>Time of Attack × Defender</h3><div class="table-scroll" id="grid_TIMExDEF"></div></div>
+      </div>
+      <div class="card"><h3>Attack Type × Time of Attack</h3><div class="table-scroll" id="grid_ATxTIME"></div></div>
+    </section>
+  </main>
+
+  <script>
+    // ----- Data from your template -----
+    const AttackType = ["Phishing","MFA Fatigue","Malware Drop","Privilege Escalation","DDoS"];
+    const TimeOfAttack = ["08:30","09:05","09:45","10:20","13:15"];
+    const Defender = ["SOC Team","Blue Team","EDR System","Email Security Gateway","DLP System"];
+
+    // State
+
+const STORAGE_KEY = 'logic-grid-state/v3-autofit';
+
+// Disable auto-loading — always start blank
+const loadState = () => ({});
+
+// Optional: keep saving if you still want export/import compatibility
+const saveState = (s) => localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+
+// Start with empty state every time
+let state = {};
+
+
+    // --- Text measuring to auto-size columns so everything is fully visible ---
+    const measure = (()=>{
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      function pxWidth(text, font){ ctx.font = font; return Math.ceil(ctx.measureText(text).width); }
+      return { pxWidth };
+    })();
+
+    function getComputedFont(el){
+      const cs = getComputedStyle(el);
+      return `${cs.fontStyle} ${cs.fontVariant} ${cs.fontWeight} ${cs.fontSize}/${cs.lineHeight} ${cs.fontFamily}`;
+    }
+
+    function calcColumnWidths(container, rowLabels, colLabels){
+      // Create a temporary element to read the font used in table headers/cells
+      const probe = document.createElement('div'); probe.style.visibility='hidden'; container.appendChild(probe);
+      const headerFont = getComputedFont(probe); const cellFont = headerFont; // same family/sizing
+      container.removeChild(probe);
+
+      const pad = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell-x-pad')) || 22;
+      const minCol = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--min-col-w')) || 90;
+      const minRow = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--min-rowkey-w')) || 160;
+
+      // Row key width = widest row label
+      const rowKeyW = Math.max(minRow, ...rowLabels.map(t=> measure.pxWidth(t, headerFont) + pad));
+      // Each data column width = max of its header and a tick/cross width, padded
+      const tickWidth = measure.pxWidth('✓', cellFont) + pad;
+      const crossWidth = measure.pxWidth('✗', cellFont) + pad;
+
+      const colWidths = colLabels.map(lbl => Math.max(minCol, measure.pxWidth(lbl, headerFont) + pad, tickWidth, crossWidth));
+      return { rowKeyW, colWidths };
+    }
+
+    function buildTable(title, rowLabels, colLabels){
+      const holder = document.createElement('div');
+      const table = document.createElement('table'); table.className = 'grid'; table.setAttribute('role','grid'); table.setAttribute('aria-label', title);
+
+      // Calculate required widths so no truncation occurs
+      const { rowKeyW, colWidths } = calcColumnWidths(holder, rowLabels, colLabels);
+
+      const colgroup = document.createElement('colgroup');
+      const rowCol = document.createElement('col'); rowCol.style.width = rowKeyW + 'px'; colgroup.appendChild(rowCol);
+      colLabels.forEach((_,i)=>{ const c = document.createElement('col'); c.style.width = colWidths[i] + 'px'; colgroup.appendChild(c); });
+      table.appendChild(colgroup);
+
+      const thead = document.createElement('thead');
+      const hr = document.createElement('tr');
+      const corner = document.createElement('th'); corner.className='rowkey'; hr.appendChild(corner);
+      colLabels.forEach(c=>{ const th=document.createElement('th'); th.textContent=c; hr.appendChild(th); });
+      thead.appendChild(hr);
+
+      const tbody = document.createElement('tbody');
+      rowLabels.forEach(r=>{
+        const tr = document.createElement('tr');
+        const th = document.createElement('th'); th.className='rowkey'; th.textContent=r; tr.appendChild(th);
+        colLabels.forEach(c=>{
+          const key = r + '|' + c;
+          const td = document.createElement('td'); td.setAttribute('data-key', key); td.setAttribute('tabindex','0'); td.setAttribute('role','gridcell');
+          const saved = (state[title] && state[title][key]) || '';
+          setCellState(td, saved);
+          td.addEventListener('click', ()=>{ const cur=td.dataset.state||''; const nxt=cur===''?'tick':cur==='tick'?'cross':''; setCellState(td,nxt); commitCell(title,key,nxt); });
+          td.addEventListener('keydown', (e)=>{
+            const k=e.key.toLowerCase();
+            if(k===' '||k==='enter'){ e.preventDefault(); td.click(); }
+            if(k==='backspace'||k==='delete'){ e.preventDefault(); setCellState(td,''); commitCell(title,key,''); }
+            if(k==='t'){ setCellState(td,'tick'); commitCell(title,key,'tick'); }
+            if(k==='x'){ setCellState(td,'cross'); commitCell(title,key,'cross'); }
+          });
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(thead); table.appendChild(tbody);
+      holder.appendChild(table);
+      return holder;
+    }
+
+    function setCellState(td, v){ td.dataset.state=v||''; td.textContent = v==='tick'?'\u2713': v==='cross'?'\u2717': ''; td.setAttribute('aria-label', v||'blank'); }
+    function commitCell(title, key, val){ state[title]=state[title]||{}; state[title][key]=val; saveState(state); }
+
+    // Mount in specific positions with shared Defender columns aligned (left stack)
+    const ATxDEF = document.getElementById('grid_ATxDEF');
+    const TIMExDEF = document.getElementById('grid_TIMExDEF');
+    const ATxTIME = document.getElementById('grid_ATxTIME');
+
+    // Build tables
+    const tableATxDEF = buildTable('Attack Type × Defender', AttackType, Defender);
+    const tableTIMExDEF = buildTable('Time of Attack × Defender', TimeOfAttack, Defender);
+    const tableATxTIME = buildTable('Attack Type × Time of Attack', AttackType, TimeOfAttack);
+
+    // Append and then ensure the two left tables share exact column widths for Defender
+    ATxDEF.appendChild(tableATxDEF);
+    TIMExDEF.appendChild(tableTIMExDEF);
+    ATxTIME.appendChild(tableATxTIME);
+
+    // Hard-align left stack columns by copying widths from the top-left table to the bottom-left
+    function syncLeftStack(){
+      const topCols = ATxDEF.querySelectorAll('colgroup col');
+      const bottomCols = TIMExDEF.querySelectorAll('colgroup col');
+      if(topCols.length && bottomCols.length && topCols.length===bottomCols.length){
+        topCols.forEach((c,i)=> bottomCols[i].style.width = c.style.width);
+      }
+    }
+    syncLeftStack();
+
+    // Controls
+
+document.getElementById('clearAllBtn').addEventListener('click', ()=>{
+  document.querySelectorAll('.grid td').forEach(td => setCellState(td,''));
+});
+
+    document.getElementById('exportBtn').addEventListener('click', ()=>{
+      const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob); const a = document.createElement('a');
+      a.href=url; a.download='logic-grid-state.json'; document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    });
+    const importInput = document.getElementById('importInput');
+    document.getElementById('importBtn').addEventListener('click', ()=> importInput.click());
+    importInput.addEventListener('change', async (e)=>{
+      const f = e.target.files?.[0]; if(!f) return;
+      try{ const txt = await f.text(); const incoming = JSON.parse(txt); if(typeof incoming!== 'object') throw new Error('Invalid JSON'); state=incoming; saveState(state); 
+        document.querySelectorAll('.grid').forEach(tbl=>{
+          const title = tbl.parentElement.previousElementSibling.textContent.trim();
+          const map = state[title]||{}; tbl.querySelectorAll('td').forEach(td=>{ const key=td.getAttribute('data-key'); if(map[key]!==undefined) setCellState(td, map[key]); });
+        });
+        alert('State imported.');
+      }catch(err){ alert('Import failed: '+err.message); } finally { e.target.value=''; }
+    });
+
+    // Zoom control (helps when projecting or on smaller screens)
+    const zoom = document.getElementById('zoom');
+    zoom.addEventListener('input', ()=>{ document.body.style.zoom = (zoom.value/100).toString(); });
+  </script>
+</body>
+</html>

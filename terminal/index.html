@@ -1,1 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Hacker Terminal (Standalone)</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: black;
+      font-family: Consolas, monospace;
+      color: #0f0;
+    }
+
+    #matrixCanvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 0;
+      background: black;
+    }
+
+    .terminal {
+      position: relative;
+      z-index: 1;
+      width: 90vw;
+      max-width: 900px;
+      height: 90vh;
+      margin: 5vh auto;
+      border: 2px solid #0f0;
+      box-shadow: 0 0 20px #0f0;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(2px);
+    }
+
+    .terminal-header {
+      font-size: 0.8rem;
+      opacity: 0.8;
+      margin-bottom: 5px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .terminal-screen {
+      flex: 1;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      padding: 5px;
+    }
+
+    .prompt-line {
+      display: flex;
+      align-items: center;
+    }
+
+    .input-caret {
+      width: 8px;
+      background: #0f0;
+      margin-left: 2px;
+      animation: blink 1s steps(1) infinite;
+    }
+
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    #hidden-input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="matrixCanvas"></canvas>
+
+<div class="terminal" tabindex="0" id="terminal">
+  <div class="terminal-header">
+    <span>H4CK-TERM v4.0</span>
+    <span>USER@MATRIX</span>
+  </div>
+
+  <div class="terminal-screen" id="screen"></div>
+
+  <div class="prompt-line">
+    <span id="prompt-label">USER@MATRIX:~$</span>&nbsp;
+    <span id="input-display"></span><span class="input-caret"></span>
+  </div>
+</div>
+
+<input id="hidden-input" autocomplete="off" />
+
+<script>
+/* ---------------------------------------------------------
+   CONFIG SECTION (STRUCTURED VERSION - OPTION B)
+--------------------------------------------------------- */
+
+const CONFIG = {
+  auth: {
+    passphrase: "LAYOUT",
+    loginReturnCode: "LOGIN-200-AUTH-SUCCESS"
+  },
+
+  network: {
+    blockReturnCodes: {
+      "443": "BLOCK-443-OK"
+    }
+  },
+
+  definitions: {
+    "soc team": "A SOC (Security Operations Center) Team monitors, detects, investigates, and responds to cybersecurity threats in real time.",
+    "blue team": "A Blue Team defends an organization’s systems by monitoring, analyzing, and improving security posture.",
+    "edr system": "An EDR (Endpoint Detection and Response) system monitors endpoints for malicious activity and provides tools for investigation and remediation.",
+    "email security gateway": "A system that filters inbound and outbound email to block spam, phishing, malware, and data exfiltration attempts.",
+    "dlp system": "A DLP (Data Loss Prevention) system prevents unauthorized access, transfer, or leakage of sensitive data.",
+    "phishing": "A social engineering attack where an attacker tricks users into revealing sensitive information or installing malware often via email.",
+    "mfa fatigue": "An attack where repeated MFA prompts are sent to a user hoping they approve one out of annoyance or confusion.",
+    "malware drop": "The stage in an attack where malicious software is delivered onto a target system.",
+    "privilege escalation": "A technique where an attacker gains higher-level permissions than originally granted.",
+    "ddos": "A Distributed Denial of Service attack overwhelms a system or network with traffic to make it unavailable. Port 443 (HTTPS) is a likely frequently targeted in these kind of attacks. This port could be blocked temporarily to stop the attack"
+  },
+
+  tasks: [
+  "Login to the system",
+  "Prevent further DDoS attacks",
+  "Solve the cyber attack grid",
+  "Analyse data"
+  ],
+
+  puzzles: {
+    code: {
+      values: ["BLOCK-443-OK", "LOGIN-200-AUTH-SUCCESS", "09:45", "18"],
+      successReturnCode: "X10-994-AB1"
+    },
+
+    grid: {
+      clues: [
+    "The Phishing attack happened first.",
+    "MFA Fatigue happened after Phishing but before 10:00.",
+    "Malware Drop was detected by a system not a human team.",
+    "Privilege Escalation occurred directly after Malware Drop.",
+    "DDoS happened much later than other attacks.",
+    "Email Security Gateway only handles email-based attacks.",
+    "DLP System did not detect MFA Fatigue or Privilege Escalation.",
+    "Blue Team did not detect the earliest attack.",
+    "The 10:20 attack was handled by the SOC Team.",
+    "MFA Fatigue was detected by EDR.",
+    "The return code is the time that Malware Drop was detected (format HH:MM)"
+      ]
+    },
+
+    analyse: {
+      messages: [
+        "USE THE PROVIDED SPREADSHEET TO ANALYSE THE DATA.",
+        "ANSWER ALL QUESTIONS AND PROVIDE THEM TO YOUR SUPERVISOR.",
+        "1. WHAT TIME HAD THE HIGHEST ATTACK VOLUME? AND WHAT KIND OF ATTACK HAPPENED THEN?",
+        "2. SORT THE SPREADSHEET BY TIMESTAMP. WHAT WERE THE FIRST AND LAST ATTACKS OF THE DAY?",
+        "3. PIVOT THE DATA. WHICH ATTACK HAPPENED ON THE MOST SEPARATE OCCASIONS? WHICH HAD THE HIGHEST OVERALL VOLUME? WHICH HAD A CRITICAL SEVERITY LEVEL?",
+        "The return code is the total volume of critical attacks for the day"
+      ]
+    },
+
+
+    signal: {
+      enabled: true,
+      description: "Extract every second digit, reverse the sequence, convert digits to letters (1=A, 2=B...).",
+      exampleInput: "531246",
+      exampleOutput: "FBC"
+    }
+  }
+};
+
+/* ---------------------------------------------------------
+   AUDIO + MATRIX RAIN + TERMINAL SETUP
+--------------------------------------------------------- */
+
+let audioCtx = null;
+
+function ensureAudioContext() {
+  if (!audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) audioCtx = new AC();
+  } else if (audioCtx.state === "suspended") {
+    audioCtx.resume();
+  }
+}
+
+function playBeep() {
+  ensureAudioContext();
+  if (!audioCtx) return;
+
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  osc.type = "square";
+  osc.frequency.value = 1200;
+  gain.gain.value = 0.05;
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  const now = audioCtx.currentTime;
+  osc.start(now);
+  osc.stop(now + 0.04);
+}
+
+const canvas = document.getElementById("matrixCanvas");
+const ctx = canvas.getContext("2d");
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
+
+const letters =
+  "アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズヅブプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const fontSize = 16;
+let columns = Math.floor(canvas.width / fontSize);
+let drops = Array(columns).fill(1);
+
+function drawMatrix() {
+  ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = "#0f0";
+  ctx.font = fontSize + "px monospace";
+
+  for (let i = 0; i < drops.length; i++) {
+    const char = letters[Math.floor(Math.random() * letters.length)];
+    ctx.fillText(char, i * fontSize, drops[i] * fontSize);
+
+    if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+      drops[i] = 0;
+    }
+    drops[i]++;
+  }
+}
+setInterval(drawMatrix, 50);
+
+const terminal = document.getElementById("terminal");
+const screen = document.getElementById("screen");
+const hiddenInput = document.getElementById("hidden-input");
+const inputDisplay = document.getElementById("input-display");
+
+let history = [];
+let historyDisplay = [];
+let historyIndex = -1;
+
+let authenticated = false;
+let bootComplete = false;
+
+function appendLine(text = "") {
+  const line = document.createElement("div");
+  line.textContent = text;
+  screen.appendChild(line);
+  screen.scrollTop = screen.scrollHeight;
+  playBeep();
+}
+
+const bootLines = [
+  "[CORE] INITIALIZING SYSTEM CONSCIOUSNESS...",
+  "[SCAN] VERIFYING CRYPTOGRAPHIC INTEGRITY...",
+  "[MEM] ALLOCATING SECURE MEMORY SEGMENTS...",
+  "[NET] ESTABLISHING OPERATOR UPLINK...",
+  "[SIM] RENDERING VIRTUAL CONSOLE...",
+  "[LOG] LOADING THREAT INTELLIGENCE MODULES...",
+  "[AUTH] PREPARING MULTI-FACTOR CHALLENGE HANDLERS...",
+  "[FIREWALL] COMPILING DYNAMIC RULE SETS...",
+  "[MONITOR] ARMING INTRUSION DETECTION ROUTINES...",
+  "[CORE] SYNCHRONIZING WITH RESIDUAL SELF-IMAGE...",
+  "[SYS] RESOLVING VIRTUAL ENVIRONMENT ANCHORS...",
+  "[SIM] LINKING CONSOLE TO SIMULATION LAYER...",
+  "[STATUS] ALL PRIMARY SUBSYSTEMS NOMINAL.",
+  "[STATUS] MINOR ANOMALIES DETECTED: NON-CRITICAL.",
+  "[CORE] HANDING CONTROL TO INTERACTIVE SHELL...",
+  "SYSTEM READY. ENTER COMMANDS BELOW. TYPE HELP FOR HELP"
+];
+
+function runBootSequence() {
+  screen.innerHTML = "";
+  let delay = 0;
+  const perLine = 700;
+
+  bootLines.forEach((line, index) => {
+    setTimeout(() => {
+      appendLine(line);
+      if (index === bootLines.length - 1) {
+        bootComplete = true;
+      }
+    }, delay);
+    delay += perLine;
+  });
+}
+
+runBootSequence();
+
+/* ---------------------------------------------------------
+   CIPHER + SIGNAL PUZZLE HELPERS
+--------------------------------------------------------- */
+
+function atbashCipher(text) {
+  const alphabet = "abcdefghijklmnopqrstuvwxyz";
+  const reversed = alphabet.split("").reverse().join("");
+
+  return text
+    .toLowerCase()
+    .split("")
+    .map(ch => {
+      const idx = alphabet.indexOf(ch);
+      return idx === -1 ? ch : reversed[idx];
+    })
+    .join("")
+    .toUpperCase();
+}
+
+function caesarCipher(text, shift) {
+  const alphabet = "abcdefghijklmnopqrstuvwxyz";
+
+  return text
+    .toLowerCase()
+    .split("")
+    .map(ch => {
+      const idx = alphabet.indexOf(ch);
+      if (idx === -1) return ch;
+      return alphabet[(idx + shift + 26) % 26];
+    })
+    .join("")
+    .toUpperCase();
+}
+
+function decryptSignalDigits(digits) {
+  const cleaned = digits.replace(/\D/g, "");
+  if (!cleaned.length) return null;
+
+  // Take every second digit
+  const extracted = [];
+  for (let i = 1; i < cleaned.length; i += 2) {
+    extracted.push(cleaned[i]);
+  }
+
+  // Reverse
+  extracted.reverse();
+
+  // Convert digits → letters (1=A)
+  const result = extracted
+    .map(d => {
+      const n = parseInt(d, 10);
+      if (n >= 1 && n <= 26) {
+        return String.fromCharCode(64 + n);
+      }
+      return "?";
+    })
+    .join("");
+
+  return result;
+}
+
+/* ---------------------------------------------------------
+   COMMAND DEFINITIONS
+--------------------------------------------------------- */
+
+const commands = {
+  help() {
+    const base = [
+      "AVAILABLE COMMANDS:",
+      "  HELP                 - SHOW THIS HELP",
+      "  CLEAR                - CLEAR THE SCREEN",
+      "  ECHO TEXT            - PRINT TEXT",
+      "  ABOUT                - ABOUT THIS TERMINAL",
+      "  DATE                 - SHOW CURRENT DATE/TIME",
+      "  LOGIN PASS           - AUTHENTICATE",
+      "  HISTORY [ -C ]       - SHOW OR CLEAR COMMAND HISTORY",
+      "  TASKS                - SHOW PENDING TASKS"
+    ];
+
+    if (!authenticated) return base;
+
+    return base.concat([
+      "",
+      "UNLOCKED COMMANDS:",
+      "  EXPLAIN TERM         - EXPLAIN AN ALLOWED SECURITY TERM",
+      "  BLOCK PORT           - BLOCK A PORT",
+      "  ATBASH TEXT          - APPLY ATBASH CIPHER",
+      "  CAESAR SHIFT TEXT    - APPLY CAESAR CIPHER",
+      "  CODE TEXT            - SUBMIT A CODE PHRASE",
+      "  GRID CLUES           - DISPLAY GRID PUZZLE CLUES",
+      "  DECRYPT SIGNAL DATA  - DECRYPT SIGNAL DIGIT STRINGS",
+      "  ANALYSE DATA         - ANALYSE THE DATA SET INSTRUCTIONS"
+    ]);
+  },
+
+  tasks() {
+    return [
+      "PENDING TASKS:",
+      ...CONFIG.tasks.map(t => " • " + t)
+    ];
+  },
+
+  login(args) {
+    if (args.length === 0) return ["USAGE: LOGIN <PASSPHRASE>"];
+
+  const attempt = args.join(" ").toLowerCase();
+  const correct = CONFIG.auth.passphrase.toLowerCase();
+
+    if (attempt === correct) {
+      authenticated = true;
+      return [
+        "ACCESS GRANTED. ADDITIONAL COMMANDS UNLOCKED.",
+        `RETURN CODE: ${CONFIG.auth.loginReturnCode}`
+      ];
+    } else {
+      return ["ACCESS DENIED. INCORRECT PASSPHRASE."];
+    }
+  },
+
+  explain(args) {
+    if (!authenticated) return ["ACCESS DENIED. USE LOGIN FIRST."];
+
+    const term = args.join(" ").toLowerCase().trim();
+
+    if (!(term in CONFIG.definitions)) {
+      return [
+        "INVALID EXPLAIN TERM.",
+        "PERMISSIBLE TERMS:",
+        ...Object.keys(CONFIG.definitions).map(t => "  " + t.toUpperCase())
+      ];
+    }
+
+    return [
+      `DEFINITION FOR "${term.toUpperCase()}":`,
+      CONFIG.definitions[term]
+    ];
+  },
+
+  block(args) {
+    if (!authenticated) return ["ACCESS DENIED. USE LOGIN FIRST."];
+
+    const value = args.join(" ").trim();
+
+    if (!/^\d+$/.test(value)) {
+      return [
+        `INVALID BLOCK VALUE: "${value}"`,
+        "BLOCK REQUIRES A NUMERIC PORT VALUE."
+      ];
+    }
+
+    if (value in CONFIG.network.blockReturnCodes) {
+      return [
+        `BLOCKING REQUEST FOR PORT ${value} PROCESSED.`,
+        `RETURN CODE: ${CONFIG.network.blockReturnCodes[value]}`
+      ];
+    }
+
+    return [
+      `PORT ${value} IS NOT RECOGNIZED.`,
+      "NO RETURN CODE FOUND FOR THIS PORT."
+    ];
+  },
+
+  atbash(args) {
+    if (!authenticated) return ["ACCESS DENIED. USE LOGIN FIRST."];
+
+    const text = args.join(" ");
+    if (!text) return ["USAGE: ATBASH <TEXT>"];
+
+    return [
+      `ATBASH RESULT: ${atbashCipher(text)}`
+    ];
+  },
+
+  caesar(args) {
+    if (!authenticated) return ["ACCESS DENIED. USE LOGIN FIRST."];
+
+    if (args.length < 2) {
+      return ["USAGE: CAESAR SHIFT TEXT"];
+    }
+
+    const shift = parseInt(args[0], 10);
+
+    if (isNaN(shift) || shift < -25 || shift > 25) {
+      return ["SHIFT MUST BE A NUMBER BETWEEN -25 AND 25."];
+    }
+
+    const text = args.slice(1).join(" ");
+    return [
+      `CAESAR RESULT: ${caesarCipher(text, shift)}`
+    ];
+  },
+
+  code(args) {
+    if (!authenticated) return ["ACCESS DENIED. USE LOGIN FIRST."];
+
+    const text = args.join(" ").trim().toLowerCase();
+    if (!text) return ["USAGE: CODE <TEXT>"];
+
+    const validCodes = CONFIG.puzzles.code.values.map(c => c.toLowerCase());
+
+    if (!validCodes.includes(text)) {
+      return [`UNRECOGNIZED CODE VALUE: "${text.toUpperCase()}".`];
+    }
+
+    if (!window.codeProgress) window.codeProgress = new Set();
+
+    if (codeProgress.has(text)) {
+      return [`CODE "${text.toUpperCase()}" ALREADY SUBMITTED THIS SESSION.`];
+    }
+
+    codeProgress.add(text);
+
+    if (codeProgress.size === validCodes.length) {
+      return [
+        "SUCCESS - YOU HAVE BEATEN THE HACKER",
+        `RETURN CODE: ${CONFIG.puzzles.code.successReturnCode}`
+      ];
+    }
+
+    return [
+      `CODE "${text.toUpperCase()}" ACCEPTED.`,
+      `PROGRESS: ${codeProgress.size}/${validCodes.length} CODES SUBMITTED THIS SESSION.`
+    ];
+  },
+
+  "grid": {
+    "clues": function() {
+      if (!authenticated) return ["ACCESS DENIED. USE LOGIN FIRST."];
+
+      return [
+        "GRID PUZZLE CLUES:",
+        ...CONFIG.puzzles.grid.clues.map(c => " • " + c)
+      ];
+    }
+  },
+
+analyse(args) {
+  if (!authenticated) return ["ACCESS DENIED. USE LOGIN FIRST."];
+
+  // Only allow ANALYSE or ANALYSE DATA
+  if (args.length > 0 && args[0] !== "data") {
+    return ["USAGE: ANALYSE or ANALYSE DATA"];
+  }
+
+  return [
+    "ANALYSIS REPORT:",
+    ...CONFIG.puzzles.analyse.messages.map(m => " • " + m)
+  ];
+},
+
+
+
+  decrypt(args) {
+    if (!authenticated) return ["ACCESS DENIED. USE LOGIN FIRST."];
+
+    if (args[0] !== "signal") {
+      return ["USAGE: DECRYPT SIGNAL <DIGITS>"];
+    }
+
+    const digits = args.slice(1).join("");
+    if (!digits) return ["USAGE: DECRYPT SIGNAL <DIGITS>"];
+
+    const result = decryptSignalDigits(digits);
+    if (!result) return ["INVALID SIGNAL INPUT."];
+
+    return [
+      `SIGNAL DECRYPTED: ${result}`
+    ];
+  },
+
+
+
+  history(args) {
+    if (args.length && args[0] === "-c") {
+      history = [];
+      historyDisplay = [];
+      historyIndex = -1;
+      return ["COMMAND HISTORY CLEARED."];
+    }
+
+    if (!historyDisplay.length) return ["NO COMMANDS IN HISTORY."];
+
+    const lines = ["COMMAND HISTORY:"];
+    historyDisplay.forEach((cmd, i) => {
+      lines.push(`${i + 1}: ${cmd}`);
+    });
+    return lines;
+  },
+
+  clear() {
+    screen.innerHTML = "";
+    return [];
+  },
+
+  about() {
+    return [
+      "H4CK-TERM v4.0",
+      "Clever stuff. Well done. So if you remember, I did say something about logging in. But I also said I've encrypted your username. Here's your encrypted username: KZXNTS. You chose a real word for your username so keep an eye out for that. I guess you're gonna have to decrypt it somehow. Maybe try a codewheel? Maybe you've seen that name somewhere? You know, I also said something about blocking my DDoS attack but that might have to wait... When you're ready for that, you might need to EXPLAIN it. And check TASKS to see what you should be doing when. Oh and don't forget about what I said about return codes... and CODE... when you're prompted of course!"
+    ];
+  },
+
+  date() {
+    return [new Date().toString().toUpperCase()];
+  },
+
+  echo(args) {
+    return [args.join(" ").toUpperCase()];
+  }
+};
+
+/* ---------------------------------------------------------
+   COMMAND DISPATCHER
+--------------------------------------------------------- */
+
+function runCommand(input) {
+  if (!input.trim()) {
+    appendLine("USER@MATRIX:~$ " + input);
+    return;
+  }
+
+  const raw = input.trim();
+  const parts = raw.split(/\s+/);
+
+  const cmd = parts[0].toLowerCase();
+  const args = parts.slice(1).map(a => a.toLowerCase());
+
+  history.push(raw);
+  historyIndex = history.length;
+
+  historyDisplay.push(raw.toUpperCase());
+
+  appendLine("USER@MATRIX:~$ " + raw.toUpperCase());
+
+  // Handle nested commands like GRID CLUES
+  if (cmd === "grid" && args[0] === "clues") {
+    const result = commands.grid.clues();
+    result.forEach(appendLine);
+    return;
+  }
+
+  if (cmd in commands) {
+    const result = commands[cmd](args);
+    if (Array.isArray(result)) result.forEach(appendLine);
+  } else {
+    appendLine(`COMMAND NOT FOUND: ${cmd.toUpperCase()}`);
+  }
+}
+
+/* ---------------------------------------------------------
+   INPUT HANDLING + HISTORY NAVIGATION
+--------------------------------------------------------- */
+
+function focusInput() {
+  ensureAudioContext();
+  hiddenInput.focus();
+}
+
+terminal.addEventListener("click", focusInput);
+window.addEventListener("click", focusInput);
+
+hiddenInput.addEventListener("input", () => {
+  inputDisplay.textContent = hiddenInput.value.toUpperCase();
+});
+
+hiddenInput.addEventListener("keydown", (e) => {
+  playBeep();
+
+  if (!bootComplete) {
+    e.preventDefault();
+    return;
+  }
+
+  if (e.key === "Enter") {
+    runCommand(hiddenInput.value.toUpperCase());
+    hiddenInput.value = "";
+    inputDisplay.textContent = "";
+    e.preventDefault();
+  } else if (e.key === "ArrowUp") {
+    if (historyIndex > 0) {
+      historyIndex--;
+      hiddenInput.value = history[historyIndex].toUpperCase();
+      inputDisplay.textContent = hiddenInput.value;
+    }
+    e.preventDefault();
+  } else if (e.key === "ArrowDown") {
+    if (historyIndex < history.length - 1) {
+      historyIndex++;
+      hiddenInput.value = history[historyIndex].toUpperCase();
+    } else {
+      historyIndex = history.length;
+      hiddenInput.value = "";
+    }
+    inputDisplay.textContent = hiddenInput.value;
+    e.preventDefault();
+  }
+});
+
+/* ---------------------------------------------------------
+   FINAL INITIALIZATION
+--------------------------------------------------------- */
+
+focusInput();
+</script>
+
+</body>
+</html>
 
