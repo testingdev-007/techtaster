@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<!-- File version: 13 — fixed stale drag listener leak (could double-add or misorder blocks on repeat use) -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Build a Real Rollercoaster — LoomSTEM in 5 Minutes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#14162B; --ink-2:#1B1E3A; --ink-3:#262A52; --ink-4:#333870;
+  --gold:#E8B34D; --teal:#4FD1C5; --rose:#D9667A; --paper:#F2EFE6; --paper-dim:#B9B6C9;
+  --display:'Fraunces', Georgia, serif; --ui:'Work Sans', system-ui, sans-serif; --mono:'JetBrains Mono', monospace;
+}
+*{box-sizing:border-box;}
+body{margin:0; background:var(--ink); color:var(--paper); font-family:var(--ui); line-height:1.6; min-height:100vh;}
+h1,h2,h3{font-family:var(--display); font-weight:600; line-height:1.25;}
+::selection{background:var(--gold); color:var(--ink);}
+
+.wrap{max-width:880px; margin:0 auto; padding:28px 20px 60px;}
+.topbar{display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:22px;}
+.navBtn{
+  background:none; border:1.5px solid var(--ink-4); color:var(--paper-dim); font-family:var(--ui);
+  font-size:12px; font-weight:600; padding:6px 12px; border-radius:999px; cursor:pointer; flex-shrink:0;
+}
+.navBtn:hover{border-color:var(--gold); color:var(--gold);}
+.brand{font-family:var(--display); font-weight:600; font-size:15px; color:var(--paper-dim);}
+.progress{display:flex; gap:6px;}
+.progress .dot{width:26px; height:5px; border-radius:3px; background:var(--ink-4); transition:background .3s;}
+.progress .dot.done{background:var(--teal);}
+.progress .dot.active{background:var(--gold);}
+
+.card{background:var(--ink-2); border:1px solid var(--ink-4); border-radius:18px; padding:28px; margin-bottom:20px;}
+#welcomeCard h1{font-size:30px; margin:0 0 12px;}
+#welcomeCard p{color:var(--paper-dim); font-size:15.5px; max-width:60ch; margin:0 0 20px;}
+
+.stepLabel{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--gold); margin-bottom:8px;}
+.stepText{font-size:16px; margin:0 0 18px; max-width:56ch;}
+
+.mainGrid{display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;}
+.sceneCol{flex:0 0 auto;}
+.controlCol{flex:1; min-width:240px;}
+.demoTabs{display:flex; gap:6px; margin:14px 0 12px; border-bottom:1px solid var(--ink-4);}
+.demoTabBtn{
+  background:none; border:none; color:var(--paper-dim); font-family:var(--ui); font-size:13px; font-weight:600;
+  padding:9px 14px; cursor:pointer; border-bottom:3px solid transparent; margin-bottom:-1px;
+}
+.demoTabBtn.active{color:var(--gold); border-bottom-color:var(--gold);}
+.demoTabPanel{display:none;}
+.demoTabPanel.active{display:block;}
+
+.sceneBox{background:#0e0f22; border:1px solid var(--ink-4); border-radius:12px; padding:8px;}
+#coasterCanvas{display:block; border-radius:8px;}
+.faceRow{display:flex; align-items:center; justify-content:center; gap:8px; margin-top:8px; font-size:22px;}
+
+.codeReveal{background:var(--ink-3); border:1px solid var(--teal); border-radius:10px; padding:12px 14px; margin:14px 0;}
+.codeRevealLabel{font-size:11.5px; color:var(--teal); margin-bottom:8px; font-weight:600;}
+.codeReveal pre{margin:0 0 10px; font-family:var(--mono); font-size:13px; color:var(--paper); white-space:pre-wrap; line-height:1.6;}
+.codeRevealNote{font-size:12px; color:var(--paper-dim); line-height:1.6; border-top:1px solid var(--ink-4); padding-top:10px;}
+.codeRevealNote code{background:var(--ink); color:var(--teal); padding:1px 5px; border-radius:4px;}
+.sandboxGrid{display:flex; flex-direction:column; gap:10px; margin-bottom:14px;}
+.sandboxGrid label{font-size:12.5px; color:var(--paper-dim); display:flex; flex-direction:column; gap:4px;}
+.sandboxGrid input{
+  background:var(--ink-3); border:1px solid var(--ink-4); border-radius:7px; padding:8px 10px;
+  color:var(--paper); font-family:var(--mono); font-size:14px;
+}
+.readout{display:grid; grid-template-columns:auto auto; gap:5px 16px; font-family:var(--mono); font-size:12.5px; color:var(--paper-dim); margin:14px 0;}
+.readout b{color:var(--paper); font-weight:600;}
+.resultMsg{font-size:14.5px; font-weight:600; margin:10px 0; min-height:22px;}
+
+.paletteZone{margin-bottom:16px;}
+.paletteHint{font-size:11.5px; color:var(--paper-dim); margin-bottom:8px;}
+.dragBlock{
+  border-radius:9px; padding:12px 14px; font-size:14px; font-weight:600; color:var(--ink);
+  cursor:grab; user-select:none; box-shadow:0 2px 0 rgba(0,0,0,0.2); display:inline-block;
+}
+.dragBlock.gravity{background:var(--rose);}
+.dragBlock.point{background:var(--gold);}
+.dragBlock:active{cursor:grabbing;}
+.dragBlock{touch-action:none;}
+.dragGhost{
+  position:fixed; z-index:1000; pointer-events:none; opacity:0.9;
+  transform:translate(-50%,-50%) scale(1.05); box-shadow:0 8px 20px rgba(0,0,0,0.4);
+}
+
+.dropzone{
+  min-height:64px; border:2px dashed var(--ink-4); border-radius:12px; padding:12px;
+  display:flex; flex-direction:column; gap:6px; transition:border-color .2s, background .2s;
+}
+.dropzone.dragover{border-color:var(--teal); background:rgba(79,209,197,0.08);}
+.dropzone .placed{
+  background:var(--ink-3); border-radius:7px; padding:8px 12px; font-size:13px; font-family:var(--mono);
+  color:var(--paper);
+}
+.dropzone .placeholder{color:var(--paper-dim); font-size:13px; font-style:italic;}
+
+.runBtn{
+  background:var(--teal); color:var(--ink); border:none; border-radius:9px; padding:11px 20px;
+  font-size:14px; font-weight:700; cursor:pointer; font-family:var(--ui); margin-top:14px;
+}
+.runBtn:disabled{opacity:0.35; cursor:default;}
+.runBtn.ghost{background:transparent; border:1.5px solid var(--gold); color:var(--gold);}
+.hidden{display:none !important;}
+
+.formula{
+  background:var(--ink-3); border:1px solid var(--teal); border-radius:10px; padding:16px 18px;
+  font-family:var(--mono); font-size:15px; text-align:center; color:var(--teal); margin:18px 0;
+}
+.celebration h1{font-size:26px;}
+.celebration p{color:var(--paper-dim); font-size:15px; max-width:58ch;}
+.ctaRow{display:flex; gap:10px; flex-wrap:wrap; margin-top:18px;}
+.ctaRow a, .ctaRow button{text-decoration:none;}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">🎢 LoomSTEM — 5-minute taster</div>
+    <div style="display:flex; gap:8px;">
+      <button class="navBtn" id="startOverBtn">↻ Start over</button>
+      <a href="index.html" class="navBtn">🏠 Home</a>
+    </div>
+    <div class="progress" id="progressDots"></div>
+  </div>
+
+  <div class="card" id="welcomeCard">
+    <h1>Build a real rollercoaster in 5 minutes</h1>
+    <p>This isn't a demo dressed up to look like coding. It's the actual LoomSTEM compiler — the same one, unmodified — running actual physics live, every single time you press Run. Drag a few blocks in. Watch real numbers decide what happens next.</p>
+    <button class="runBtn" id="startBtn">▶ Let's go</button>
+  </div>
+
+  <div class="card hidden" id="tutorialCard">
+    <div class="stepLabel" id="stepLabel">Step 1 of 5</div>
+    <p class="stepText" id="stepText"></p>
+
+    <div class="mainGrid">
+      <div class="sceneCol">
+        <div class="sceneBox">
+          <canvas id="coasterCanvas" width="320" height="200"></canvas>
+        </div>
+        <div class="faceRow"><span id="riderFace">🙂</span><span style="font-size:12px; color:var(--paper-dim);">the rider</span></div>
+      </div>
+
+      <div class="controlCol">
+        <div class="paletteZone" id="paletteZone">
+          <div class="paletteHint">Drag this block into the track below:</div>
+          <div class="dragBlock" id="dragBlock"></div>
+        </div>
+
+        <div class="dropzone" id="dropzone">
+          <div class="placeholder" id="dropPlaceholder">Your track will build up here</div>
+        </div>
+
+        <div class="sandboxControls hidden" id="sandboxControls">
+          <div class="sandboxGrid">
+            <label>Gravity <input type="number" id="sbGravity" value="9.8" step="0.1"></label>
+            <label>Point 1 (start) <input type="number" id="sbP1" value="80"></label>
+            <label>Point 2 <input type="number" id="sbP2" value="75"></label>
+            <label>Point 3 <input type="number" id="sbP3" value="10"></label>
+            <label>Point 4 (end) <input type="number" id="sbP4" value="45"></label>
+          </div>
+          <div class="sliderRow">
+            <label>Declared engine: <b id="sbEngineValue">physics</b> (try picking a wrong one)</label>
+            <select id="sbEngineSelect" style="width:100%; background:var(--ink-3); border:1px solid var(--ink-4); color:var(--paper); padding:8px; border-radius:7px; font-family:var(--mono);">
+              <option value="physics">physics (correct)</option>
+              <option value="chemistry">chemistry (wrong on purpose)</option>
+              <option value="maths">maths (wrong on purpose)</option>
+            </select>
+          </div>
+          <button class="runBtn" id="sandboxRunBtn">▶ Test my ride</button>
+        </div>
+
+        <div class="demoTabs">
+          <button class="demoTabBtn active" id="tabBtnResult">📊 Result</button>
+          <button class="demoTabBtn" id="tabBtnCode">💻 The Real Code</button>
+        </div>
+
+        <div class="demoTabPanel active" id="resultPanel">
+          <div class="readout" id="readout"></div>
+          <div class="resultMsg" id="resultMsg"></div>
+        </div>
+
+        <div class="demoTabPanel" id="codePanel">
+          <div class="codeReveal" id="codeReveal">
+            <div class="codeRevealLabel">This is the real code your blocks just built — the compiler runs exactly this, nothing more:</div>
+            <pre id="codeRevealText"></pre>
+            <div class="codeRevealNote"><code>trackPoint(height)</code> is a real, pre-built LoomSTEM action — not something you wrote yourself, a tool the language gives you. Behind every call, it runs <strong>new speed² = old speed² + 2 × gravity × (old height − new height)</strong>, chained from wherever the cart already was. <strong>Thrill</strong> is that real physics number — the total of how much speed changes at each point. <strong>Ride rating</strong> is different: a designed score, the way real ride safety engineers think — it peaks for a ride that's exciting <em>and</em> safe, and drops fast once thrill gets high enough to be a genuine safety problem, not just "extra fun."</div>
+          </div>
+        </div>
+
+        <button class="runBtn hidden" id="runBtn">▶ Test the ride</button>
+        <button class="runBtn ghost hidden" id="continueBtn">Continue →</button>
+        <button class="runBtn ghost hidden" id="sandboxContinueBtn">See the big reveal →</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card celebration hidden" id="celebrationCard">
+    <h1>🎉 That's a real rollercoaster, built by you.</h1>
+    <p>Here's the honest part most demos skip: your blocks only ever called one thing — <code>trackPoint(height)</code>. That's a real, pre-built LoomSTEM action, the same way <code>forward()</code> is in the Art world. It's not LoomScript you wrote yourself; it's a tool the language gives you, and behind it, this exact formula runs every single time it's called:</p>
+    <div class="formula">new speed² = old speed² + 2 × gravity × (old height − new height)</div>
+    <p>Not a simplified version, the real one — it's why the very first drop and every drop after it can genuinely produce different numbers depending on how fast the cart already was, exactly like conservation of energy actually works. <code>trackPoint()</code> hides the arithmetic the same way a calculator hides how it does long division — it's still really happening, just inside a tool built to do it for you.</p>
+    <p>Same blocks. Same compiler. The only thing you changed was one number — real physics decided the rest, live, the same way it will for a student building their own ride, their own bowling game, or their own chemistry experiment.</p>
+    <p>One more thing worth noticing: every script you just built started with <code>@engine: physics</code>. That's a genuine declaration, not decoration — it tells the compiler which part of the language this program is allowed to use. Try the sandbox's engine dropdown with something other than "physics" and press Run: it won't silently do nothing, it'll tell you exactly why <code>trackPoint()</code> doesn't belong there. This is a prototype — most LoomSTEM programs don't have this line yet — but it's how a real, deliberately-declared engine boundary would work.</p>
+    <div class="ctaRow">
+      <button class="runBtn ghost" id="restartBtn">↻ Try it again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   The real LoomSTEM interpreter — extracted verbatim from loomstem.html,
+   not reimplemented. Same tokenizer, parser, and evaluator that runs every
+   Cell in the full app. If this taster feels real, it's because it is.
+   ========================================================================= */
+class ReturnSignal { constructor(value){ this.value = value; } }
+
+function tokenizeExpr(src){
+  const re = /\s*(==|>=|<=|[()+\-*/=<>,]|"[^"]*"|[A-Za-z_][A-Za-z0-9_]*|[0-9]+(\.[0-9]+)?)/y;
+  const toks = []; let m;
+  while(re.lastIndex < src.length && (m = re.exec(src))){
+    if(m[1] === undefined) break;
+    toks.push(m[1]);
+  }
+  return toks;
+}
+function parseExprTokens(toks){
+  let i = 0;
+  function peek(){ return toks[i]; }
+  function next(){ return toks[i++]; }
+  function primary(){
+    const t = next();
+    if(t === '('){ const e = logicalOr(); next(); return e; }
+    if(t[0] === '"') return { k:'str', v:t.slice(1,-1) };
+    if(/^[0-9]/.test(t)) return { k:'num', v:parseFloat(t) };
+    if(peek() === '('){
+      next();
+      const args = [];
+      if(peek() !== ')'){
+        args.push(logicalOr());
+        while(peek() === ','){ next(); args.push(logicalOr()); }
+      }
+      next();
+      return { k:'call', name:t, args };
+    }
+    return { k:'ident', v:t };
+  }
+  function unary(){
+    if(peek() === '-'){ next(); return { k:'neg', v:unary() }; }
+    return primary();
+  }
+  function term(){
+    let left = unary();
+    while(peek()==='*' || peek()==='/'){ const op = next(); left = { k:'bin', op, l:left, r:unary() }; }
+    return left;
+  }
+  function additive(){
+    let left = term();
+    while(peek()==='+' || peek()==='-'){ const op = next(); left = { k:'bin', op, l:left, r:term() }; }
+    return left;
+  }
+  function comparison(){
+    let left = additive();
+    if(['==','>','<','>=','<='].includes(peek())){ const op = next(); left = { k:'cmp', op, l:left, r:additive() }; }
+    return left;
+  }
+  function logicalNot(){
+    if(peek() === 'not'){ next(); return { k:'not', v: logicalNot() }; }
+    return comparison();
+  }
+  function logicalAnd(){
+    let left = logicalNot();
+    while(peek() === 'and'){ next(); left = { k:'and', l:left, r:logicalNot() }; }
+    return left;
+  }
+  function logicalOr(){
+    let left = logicalAnd();
+    while(peek() === 'or'){ next(); left = { k:'or', l:left, r:logicalAnd() }; }
+    return left;
+  }
+  return logicalOr();
+}
+async function evalExpr(node, env, hooks){
+  switch(node.k){
+    case 'num': return node.v;
+    case 'str': return node.v;
+    case 'ident': return env[node.v] !== undefined ? env[node.v] : 0;
+    case 'neg': return -(await evalExpr(node.v, env, hooks));
+    case 'bin': {
+      const l = await evalExpr(node.l, env, hooks), r = await evalExpr(node.r, env, hooks);
+      if(node.op==='+') return (typeof l==='string'||typeof r==='string') ? String(l)+String(r) : l+r;
+      if(node.op==='-') return l-r;
+      if(node.op==='*') return l*r;
+      if(node.op==='/') return l/r;
+      break;
+    }
+    case 'cmp': {
+      const l = await evalExpr(node.l, env, hooks), r = await evalExpr(node.r, env, hooks);
+      if(node.op==='==') return l===r;
+      if(node.op==='>')  return l>r;
+      if(node.op==='<')  return l<r;
+      if(node.op==='>=') return l>=r;
+      if(node.op==='<=') return l<=r;
+      break;
+    }
+    case 'call': {
+      const argVals = [];
+      for(const a of node.args) argVals.push(await evalExpr(a, env, hooks));
+      return await callNamed(node.name, argVals, env, hooks);
+    }
+    case 'not': return !(await evalExpr(node.v, env, hooks));
+    case 'and': {
+      const l = await evalExpr(node.l, env, hooks);
+      if(!l) return l;
+      return await evalExpr(node.r, env, hooks);
+    }
+    case 'or': {
+      const l = await evalExpr(node.l, env, hooks);
+      if(l) return l;
+      return await evalExpr(node.r, env, hooks);
+    }
+  }
+  return 0;
+}
+async function callNamed(name, argVals, env, hooks){
+  const fn = hooks.functions && hooks.functions[name];
+  if(fn){
+    const localEnv = Object.create(hooks.globalEnv || env);
+    fn.params.forEach((p,i)=>{ localEnv[p] = argVals[i] !== undefined ? argVals[i] : 0; });
+    try {
+      await runLoomScript(fn.body, localEnv, hooks);
+    } catch(e){
+      if(e instanceof ReturnSignal) return e.value;
+      throw e;
+    }
+    return 0;
+  }
+  if(name === 'say'){ if(hooks.onSay) hooks.onSay(argVals[0]); return 0; }
+  if(hooks.onAction){ const r = await hooks.onAction(name, argVals, env); return r === undefined ? 0 : r; }
+  return 0;
+}
+function collectFunctions(stmts){
+  const fns = {};
+  stmts.forEach(st=>{ if(st.type === 'define') fns[st.name] = { params: st.params, body: st.body }; });
+  return fns;
+}
+function splitArgs(s){
+  const args = []; let depth = 0, inStr = false, cur = '';
+  for(let i=0; i<s.length; i++){
+    const c = s[i];
+    if(c === '"') inStr = !inStr;
+    if(!inStr){
+      if(c === '(') depth++;
+      if(c === ')') depth--;
+      if(c === ',' && depth === 0){ args.push(cur); cur = ''; continue; }
+    }
+    cur += c;
+  }
+  if(cur.trim().length) args.push(cur);
+  return args.map(a => a.trim());
+}
+function parseLoomScript(lines){
+  let i = 0;
+  const callRe = /^([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)$/;
+  function parseBlock(){
+    const stmts = [];
+    while(i < lines.length){
+      let line = lines[i].trim();
+      if(line === '}'){ i++; break; }
+      if(/^on\s+start\s*:?$/.test(line)){ i++; continue; }
+      if(line.endsWith('{')){
+        const head = line.slice(0, -1).trim();
+        if(head.startsWith('if ')){
+          const cond = parseExprTokens(tokenizeExpr(head.slice(3)));
+          i++;
+          const body = parseBlock();
+          let elseBody = [];
+          if(lines[i] && lines[i].trim() === '} else {'){ i++; elseBody = parseBlock(); }
+          stmts.push({ type:'if', cond, body, elseBody });
+        } else if(head.startsWith('repeat ') && head.endsWith('times')){
+          const countExpr = parseExprTokens(tokenizeExpr(head.slice(7, -6)));
+          i++;
+          const body = parseBlock();
+          stmts.push({ type:'repeat', countExpr, body });
+        } else if(head.startsWith('define ')){
+          const sig = head.slice(7).trim();
+          const m = sig.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)$/);
+          i++;
+          const body = parseBlock();
+          if(m){
+            const name = m[1];
+            const params = m[2].trim().length ? m[2].split(',').map(p=>p.trim()) : [];
+            stmts.push({ type:'define', name, params, body });
+          }
+        } else { i++; }
+        continue;
+      }
+      if(/^return(\s|\(|$)/.test(line)){
+        const rest = line.slice(6).trim();
+        stmts.push({ type:'return', expr: rest ? parseExprTokens(tokenizeExpr(rest)) : null });
+        i++; continue;
+      }
+      if(line.startsWith('set ')){
+        const [ident, rhs] = line.slice(4).split('=');
+        stmts.push({ type:'set', ident: ident.trim(), expr: parseExprTokens(tokenizeExpr(rhs)) });
+        i++; continue;
+      }
+      const callMatch = line.match(callRe);
+      if(callMatch){
+        const name = callMatch[1];
+        const argStrs = callMatch[2].trim().length ? splitArgs(callMatch[2]) : [];
+        const args = argStrs.map(a => parseExprTokens(tokenizeExpr(a)));
+        stmts.push({ type:'call', name, args });
+        i++; continue;
+      }
+      const eq = line.indexOf('=');
+      const lhs = eq > -1 ? line.slice(0,eq).trim() : '';
+      if(eq > -1 && lhs && !lhs.includes(' ') && line[eq+1] !== '='){
+        stmts.push({ type:'assign', ident: lhs, expr: parseExprTokens(tokenizeExpr(line.slice(eq+1))) });
+        i++; continue;
+      }
+      i++;
+    }
+    return stmts;
+  }
+  return parseBlock();
+}
+const sleep = ms => new Promise(r=>setTimeout(r, ms));
+async function runLoomScript(stmts, env, hooks){
+  for(const st of stmts){
+    if(st.type==='define'){ continue; }
+    else if(st.type==='return'){ throw new ReturnSignal(st.expr ? await evalExpr(st.expr, env, hooks) : undefined); }
+    else if(st.type==='set' || st.type==='assign'){ env[st.ident] = await evalExpr(st.expr, env, hooks); }
+    else if(st.type==='if'){
+      if(await evalExpr(st.cond, env, hooks)) await runLoomScript(st.body, env, hooks);
+      else if(st.elseBody.length) await runLoomScript(st.elseBody, env, hooks);
+    } else if(st.type==='repeat'){
+      const n = await evalExpr(st.countExpr, env, hooks);
+      for(let k=0; k<n; k++){
+        await runLoomScript(st.body, env, hooks);
+        if(hooks.onTick) await hooks.onTick(env);
+      }
+    } else if(st.type==='call'){
+      const argVals = [];
+      for(const a of st.args) argVals.push(await evalExpr(a, env, hooks));
+      await callNamed(st.name, argVals, env, hooks);
+    }
+  }
+}
+async function runProgram(stmts, env, hooks){
+  hooks.functions = collectFunctions(stmts);
+  hooks.globalEnv = env;
+  try { await runLoomScript(stmts, env, hooks); }
+  catch(e){ if(!(e instanceof ReturnSignal)) throw e; }
+}
+
+/* =========================================================================
+   The guided tutorial itself. Purely additive (drag block -> appears at
+   the end of the track), by design -- no reordering needed for a 5-minute
+   first taste. Same visual language as the polished coaster in the full
+   app (sky, ground, pylons, a cart with the rider's face on it).
+   ========================================================================= */
+
+const STEPS = [
+  { label:'Step 1 of 5', text:'Every rollercoaster obeys one rule: gravity. Real Earth gravity is 9.8 m/s\u00b2 — drag this block in to set it.',
+    block:{cls:'gravity', text:'Set gravity to 9.8', code:'set gravity = 9.8'}, showRun:false },
+  { label:'Step 2 of 5', text:"Now place the very top of the ride — where the cart starts, before it drops.",
+    block:{cls:'point', text:'Track point: 80m (the start)', code:'trackPoint(80)'}, showRun:false },
+  { label:'Step 3 of 5', text:"Let's add the first drop. We'll start small and careful.",
+    block:{cls:'point', text:'Track point: 75m (a small dip)', code:'trackPoint(75)'}, showRun:'first' },
+  { label:'Step 4 of 5', text:"Real thrill comes from a BIG change, not a gentle one. Let's add a proper drop.",
+    block:{cls:'point', text:'Track point: 10m (a BIG drop!)', code:'trackPoint(10)'}, showRun:false },
+  { label:'Step 5 of 5', text:"Every good ride needs a safe ending. Let's bring it back up.",
+    block:{cls:'point', text:'Track point: 45m (level out)', code:'trackPoint(45)'}, showRun:'second' }
+];
+
+let stepIndex = 0;
+let placedBlocks = []; // {text, code}
+
+const TOTAL_STEPS = STEPS.length + 1; // +1 for the free-play sandbox step
+function renderProgress(){
+  const el = document.getElementById('progressDots');
+  const dots = [];
+  for(let i=0; i<TOTAL_STEPS; i++){
+    const cls = i < stepIndex ? 'done' : (i === stepIndex ? 'active' : '');
+    dots.push(`<div class="dot ${cls}"></div>`);
+  }
+  el.innerHTML = dots.join('');
+}
+
+function renderStep(){
+  renderProgress();
+  const step = STEPS[stepIndex];
+  document.getElementById('stepLabel').textContent = step.label;
+  document.getElementById('stepText').textContent = step.text;
+
+  const dragBlock = document.getElementById('dragBlock');
+  dragBlock.className = 'dragBlock ' + step.block.cls;
+  dragBlock.textContent = step.block.text;
+  dragBlock.dataset.code = step.block.code;
+  dragBlock.dataset.text = step.block.text;
+  document.getElementById('paletteZone').classList.remove('hidden');
+
+  document.getElementById('runBtn').classList.add('hidden');
+  document.getElementById('continueBtn').classList.add('hidden');
+  switchDemoTab('result');
+  document.getElementById('sandboxControls').classList.add('hidden');
+  document.getElementById('sandboxContinueBtn').classList.add('hidden');
+  document.getElementById('dropzone').classList.remove('hidden');
+  document.getElementById('resultMsg').textContent = '';
+}
+
+function renderDroppedBlocks(){
+  const dz = document.getElementById('dropzone');
+  const placeholder = document.getElementById('dropPlaceholder');
+  dz.innerHTML = '';
+  if(placedBlocks.length === 0){
+    dz.appendChild(placeholder);
+    return;
+  }
+  placedBlocks.forEach(b=>{
+    const div = document.createElement('div');
+    div.className = 'placed';
+    div.textContent = b.text;
+    dz.appendChild(div);
+  });
+}
+
+function switchDemoTab(tab){
+  document.getElementById('tabBtnResult').classList.toggle('active', tab === 'result');
+  document.getElementById('tabBtnCode').classList.toggle('active', tab === 'code');
+  document.getElementById('resultPanel').classList.toggle('active', tab === 'result');
+  document.getElementById('codePanel').classList.toggle('active', tab === 'code');
+}
+document.getElementById('tabBtnResult').addEventListener('click', ()=> switchDemoTab('result'));
+document.getElementById('tabBtnCode').addEventListener('click', ()=> switchDemoTab('code'));
+
+function drawScene(){
+  const canvas = document.getElementById('coasterCanvas');
+  const ctx = canvas.getContext('2d');
+  const groundY = canvas.height - 12;
+  const sky = ctx.createLinearGradient(0,0,0,canvas.height);
+  sky.addColorStop(0, '#0e0f22'); sky.addColorStop(1, '#1b2340');
+  ctx.fillStyle = sky; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = '#2a2f1e'; ctx.fillRect(0, groundY, canvas.width, canvas.height-groundY);
+  ctx.strokeStyle = 'rgba(143,209,79,0.4)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0,groundY); ctx.lineTo(canvas.width,groundY); ctx.stroke();
+}
+drawScene();
+
+// Pointer Events, not native HTML5 drag-and-drop -- the native drag API
+// (draggable="true" + dragstart/dragover/drop) only ever fires from real
+// mouse events. Safari on iPad/iOS never dispatches those from touch, so
+// nothing built on it responds to a finger at all. Pointer Events fire
+// uniformly for mouse AND touch in every modern browser, iPad included.
+const dropzone = document.getElementById('dropzone');
+let dragGhost = null;
+let isDragging = false;
+
+function handleBlockDropped(data){
+  placedBlocks.push(data);
+  renderDroppedBlocks();
+  document.getElementById('paletteZone').classList.add('hidden');
+
+  const step = STEPS[stepIndex];
+  if(step.showRun){
+    const generatedCode = '@engine: physics\non start:\n' + placedBlocks.map(b=>b.code).join('\n');
+    document.getElementById('codeRevealText').textContent = generatedCode;
+    const rb = document.getElementById('runBtn');
+    rb.classList.remove('hidden');
+    rb.disabled = false; // was left disabled from a previous run -- this is the actual fix
+  } else {
+    document.getElementById('resultMsg').textContent = '✓ Nice.';
+    setTimeout(()=>{
+      stepIndex++;
+      renderStep();
+    }, 900);
+  }
+}
+
+function pointInRect(x, y, rect){
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+let dragSessionId = 0;
+let activeCleanup = null;
+document.getElementById('dragBlock').addEventListener('pointerdown', e=>{
+  // Same defensive fix as intro_to_loom.html -- a drag that never gets a
+  // matching pointerup (a real touch failure mode: lost pointer capture,
+  // an interrupted gesture) would otherwise leave its listeners on
+  // document forever, misfiring later using whatever dataset the shared
+  // #dragBlock element holds by then.
+  if(activeCleanup) activeCleanup();
+
+  const source = e.currentTarget;
+  const mySession = ++dragSessionId;
+  isDragging = true;
+  source.setPointerCapture(e.pointerId);
+
+  dragGhost = source.cloneNode(true);
+  dragGhost.classList.add('dragGhost');
+  dragGhost.removeAttribute('id');
+  dragGhost.style.width = source.offsetWidth + 'px';
+  document.body.appendChild(dragGhost);
+  moveGhost(e.clientX, e.clientY);
+
+  function moveGhost(x, y){
+    if(dragGhost){ dragGhost.style.left = x + 'px'; dragGhost.style.top = y + 'px'; }
+  }
+  function onMove(ev){
+    if(mySession !== dragSessionId || !isDragging) return;
+    moveGhost(ev.clientX, ev.clientY);
+    const rect = dropzone.getBoundingClientRect();
+    dropzone.classList.toggle('dragover', pointInRect(ev.clientX, ev.clientY, rect));
+  }
+  function cleanup(){
+    isDragging = false;
+    if(dragGhost){ dragGhost.remove(); dragGhost = null; }
+    dropzone.classList.remove('dragover');
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    document.removeEventListener('pointercancel', onUp);
+    if(activeCleanup === cleanup) activeCleanup = null;
+  }
+  function onUp(ev){
+    if(mySession !== dragSessionId || !isDragging) return;
+    source.releasePointerCapture(e.pointerId);
+    const rect = dropzone.getBoundingClientRect();
+    const droppedInside = pointInRect(ev.clientX, ev.clientY, rect);
+    const droppedText = source.dataset.text, droppedCode = source.dataset.code;
+    cleanup();
+    if(droppedInside){
+      handleBlockDropped({ text: droppedText, code: droppedCode });
+    }
+  }
+  activeCleanup = cleanup;
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+  document.addEventListener('pointercancel', onUp);
+});
+
+// This is a DESIGNED rating, not a raw physics quantity like thrill is --
+// real ride engineers don't just maximise G-forces, they optimise for
+// maximum excitement *within* a safe range. Peaks in the middle of the
+// "thrilling, not sick" band; falls off in both directions, and falls off
+// much faster past the safety limit than it does for being merely tame.
+function rideRating(thrill){
+  const idealMin = 12, idealMax = 55;
+  if(thrill >= idealMin && thrill <= idealMax){
+    const mid = (idealMin+idealMax)/2, halfRange = (idealMax-idealMin)/2;
+    return Math.round(100 - 20*Math.abs(thrill-mid)/halfRange);
+  } else if(thrill < idealMin){
+    return Math.round(80 * thrill/idealMin);
+  } else {
+    const over = thrill - idealMax;
+    return Math.max(0, Math.round(80 - over*3));
+  }
+}
+
+function renderReadout(height, v, jolt, thrill, tick, incomplete){
+  const r = document.getElementById('readout');
+  // A ride that didn't finish isn't "a bit tame" or "a bit intense" -- it's
+  // incomplete, full stop. Rating it off whatever thrill happened to build
+  // up before the failure would be meaningless at best, misleading at worst
+  // (exactly what was reported: a stall scoring 97/100 purely because the
+  // successful portion before it happened to land in the ideal band).
+  const ratingDisplay = incomplete ? '— (ride incomplete)' : `${rideRating(thrill)}/100`;
+  r.innerHTML = `
+    <span>point</span><b>${tick}</b>
+    <span>height</span><b>${height.toFixed(1)} m</b>
+    <span>speed</span><b>${v.toFixed(1)} m/s</b>
+    <span>total thrill (real physics)</span><b>${thrill.toFixed(0)}</b>
+    <span>ride rating (safety-adjusted)</span><b>${ratingDisplay}</b>`;
+}
+
+// Shared by both the guided steps and the free-play sandbox -- one real
+// run of the interpreter, drawn the same way every time.
+// Prototype: a real "@engine:" declaration, checked against which real
+// LoomSTEM engine an action actually belongs to. Not decorative -- if the
+// declared engine doesn't cover the action a script tries to call, this
+// catches it explicitly instead of the interpreter silently doing nothing,
+// which is what happens today with no declaration at all.
+const ENGINE_ACTIONS = {
+  physics: ['trackPoint'],
+  chemistry: ['heat', 'cool', 'addDrops', 'addMetal', 'mix'],
+  maths: ['roll', 'showYear'],
+  art: ['forward', 'turn', 'penUp', 'penDown', 'setColor']
+};
+function parseEngineDeclaration(source){
+  const lines = source.split('\n');
+  const engineLineIdx = lines.findIndex(l => l.trim().startsWith('@engine:'));
+  if(engineLineIdx === -1) return { engines: [], code: source };
+  const engines = lines[engineLineIdx].split(':')[1].split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  const code = lines.filter((_,i)=> i !== engineLineIdx).join('\n');
+  return { engines, code };
+}
+function validateAction(name, declaredEngines){
+  if(declaredEngines.length === 0) return { ok: true }; // no declaration -- nothing to check against (today's default)
+  const owner = Object.keys(ENGINE_ACTIONS).find(e => ENGINE_ACTIONS[e].includes(name));
+  if(!owner) return { ok: true }; // not a tracked action, don't block it
+  if(!declaredEngines.includes(owner)){
+    return { ok: false, error: `"${name}()" belongs to the "${owner}" engine, but this program only declared: ${declaredEngines.join(', ')}. That's exactly the kind of silent mismatch a declared engine is meant to catch.` };
+  }
+  return { ok: true };
+}
+
+async function runCoasterSource(fullSource, faceEl){
+  const { engines: declaredEngines, code: source } = parseEngineDeclaration(fullSource);
+  const ast = parseLoomScript(source.split('\n'));
+  const env = {};
+  const canvas = document.getElementById('coasterCanvas');
+  const ctx = canvas.getContext('2d');
+  drawScene();
+
+  let prevHeight = null, prevV = 0, thrill = 0, tick = 0, stalled = false, stalledHeight = null, engineError = null;
+  const scaleY = 1.5, stepX = 65, startX = 25;
+  const groundY = canvas.height - 12;
+  const toCanvasY = h => groundY - 15 - h*scaleY;
+  let currentFace = '🙂';
+  if(faceEl) faceEl.textContent = currentFace;
+
+  function drawPylon(x,y,broken){
+    ctx.strokeStyle = broken ? 'rgba(217,102,82,0.7)' : 'rgba(185,182,201,0.5)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,groundY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x-6,groundY-14); ctx.lineTo(x+6,groundY-2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x+6,groundY-14); ctx.lineTo(x-6,groundY-2); ctx.stroke();
+  }
+  function drawCart(x,y,fast){
+    if(fast){
+      ctx.strokeStyle = 'rgba(232,179,77,0.5)'; ctx.lineWidth = 2;
+      for(let i=1;i<=3;i++){ ctx.beginPath(); ctx.moveTo(x-10-i*6,y); ctx.lineTo(x-4-i*6,y); ctx.stroke(); }
+    }
+    ctx.fillStyle = '#E8B34D';
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x-10,y-8,20,12,3) : ctx.rect(x-10,y-8,20,12);
+    ctx.fill();
+    ctx.fillStyle = '#14162B';
+    ctx.beginPath(); ctx.arc(x-6,y+6,3,0,Math.PI*2); ctx.arc(x+6,y+6,3,0,Math.PI*2); ctx.fill();
+    ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(currentFace, x, y-10);
+  }
+
+  await runProgram(ast, env, {
+    onAction: async (name, args)=>{
+      if(name !== 'trackPoint') return;
+      if(stalled || engineError) return;
+      const check = validateAction(name, declaredEngines);
+      if(!check.ok){ engineError = check.error; return; }
+      const val = args[0];
+      const x = startX + tick*stepX;
+      const y = toCanvasY(val);
+      if(prevHeight === null){
+        drawPylon(x,y,false);
+        drawCart(x,y,false);
+        prevHeight = val; prevV = 0;
+      } else {
+        const vSq = prevV*prevV + 2*env.gravity*(prevHeight-val);
+        if(vSq <= 0){
+          // Real energy conservation: there isn't enough speed left to reach
+          // this height. The cart stops partway up -- drawn honestly as a
+          // dead stop, not glossed over or allowed to continue regardless.
+          stalled = true; stalledHeight = val;
+          const px = startX + (tick-1)*stepX, py = toCanvasY(prevHeight);
+          const midX = (px+x)/2, midY = (py+y)/2;
+          ctx.strokeStyle = 'rgba(217,102,82,0.8)'; ctx.lineWidth = 3; ctx.setLineDash([4,4]);
+          ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(midX,midY); ctx.stroke();
+          ctx.setLineDash([]);
+          currentFace = '😵';
+          drawCart(midX,midY,false);
+          if(faceEl) faceEl.textContent = currentFace;
+          renderReadout(prevHeight, 0, 0, thrill, tick, true);
+          return;
+        }
+        const newV = Math.sqrt(vSq);
+        const jolt = Math.abs(newV - prevV);
+        thrill += jolt;
+        const px = startX + (tick-1)*stepX, py = toCanvasY(prevHeight);
+        drawPylon(x,y,false);
+        ctx.strokeStyle = '#4FD1C5'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(x,y); ctx.stroke();
+        currentFace = thrill > 55 ? '🤢' : thrill > 30 ? '😲' : thrill > 12 ? '😃' : '🙂';
+        drawCart(x,y,jolt>8);
+        renderReadout(val, newV, jolt, thrill, tick+1);
+        if(faceEl) faceEl.textContent = currentFace;
+        prevHeight = val; prevV = newV;
+      }
+      tick++;
+      await sleep(700);
+    }
+  });
+
+  return { thrill, stalled, stalledHeight, engineError };
+}
+
+document.getElementById('runBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('runBtn');
+  const face = document.getElementById('riderFace');
+  const msg = document.getElementById('resultMsg');
+  btn.disabled = true; msg.textContent = ''; face.textContent = '🙂';
+  document.getElementById('coasterCanvas').scrollIntoView({ behavior:'smooth', block:'center' });
+
+  const source = '@engine: physics\non start:\n' + placedBlocks.map(b=>b.code).join('\n');
+  const { thrill, stalled, engineError } = await runCoasterSource(source, face);
+
+  const step = STEPS[stepIndex];
+  if(engineError){
+    msg.textContent = `⚠ ${engineError}`;
+  } else if(stalled){
+    msg.textContent = "The cart didn't have enough speed to reach that height — try smaller changes.";
+  } else if(step.showRun === 'first'){
+    msg.textContent = `Ride rating: ${rideRating(thrill)}/100 — bit tame, hardly a drop at all.`;
+    document.getElementById('continueBtn').textContent = "Real designers wouldn't stop here. Let's fix it →";
+  } else {
+    msg.textContent = thrill > 55
+      ? `Ride rating: ${rideRating(thrill)}/100 — too intense, not just "extra thrilling." Real ride design caps the G-forces on purpose.`
+      : `Ride rating: ${rideRating(thrill)}/100 — thrilling AND safe. That's the actual goal, not just "as wild as possible."`;
+    document.getElementById('continueBtn').textContent = "See what actually just happened →";
+  }
+  document.getElementById('continueBtn').classList.remove('hidden');
+  btn.classList.add('hidden');
+});
+
+document.getElementById('continueBtn').addEventListener('click', ()=>{
+  stepIndex++;
+  if(stepIndex >= STEPS.length){
+    enterSandbox();
+  } else {
+    renderStep();
+  }
+});
+
+function enterSandbox(){
+  renderProgress();
+  document.getElementById('stepLabel').textContent = 'Step 6 of 6';
+  document.getElementById('stepText').textContent = "Now make it yours. Change any of these numbers and test the ride as many times as you like — same real physics, your numbers.";
+  document.getElementById('paletteZone').classList.add('hidden');
+  document.getElementById('dropzone').classList.add('hidden');
+  switchDemoTab('result');
+  document.getElementById('runBtn').classList.add('hidden');
+  document.getElementById('continueBtn').classList.add('hidden');
+  document.getElementById('resultMsg').textContent = '';
+  document.getElementById('sandboxControls').classList.remove('hidden');
+  document.getElementById('sandboxContinueBtn').classList.remove('hidden');
+}
+
+document.getElementById('sbEngineSelect').addEventListener('change', (e)=>{
+  document.getElementById('sbEngineValue').textContent = e.target.value;
+});
+
+document.getElementById('sandboxRunBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('sandboxRunBtn');
+  const face = document.getElementById('riderFace');
+  const msg = document.getElementById('resultMsg');
+  btn.disabled = true; msg.textContent = ''; face.textContent = '🙂';
+  document.getElementById('coasterCanvas').scrollIntoView({ behavior:'smooth', block:'center' });
+
+  const gravity = Number(document.getElementById('sbGravity').value) || 9.8;
+  const p1 = Number(document.getElementById('sbP1').value) || 0;
+  const p2 = Number(document.getElementById('sbP2').value) || 0;
+  const p3 = Number(document.getElementById('sbP3').value) || 0;
+  const p4 = Number(document.getElementById('sbP4').value) || 0;
+  const declaredEngine = document.getElementById('sbEngineSelect').value;
+  const source = `@engine: ${declaredEngine}\non start:\nset gravity = ${gravity}\ntrackPoint(${p1})\ntrackPoint(${p2})\ntrackPoint(${p3})\ntrackPoint(${p4})`;
+
+  document.getElementById('codeRevealText').textContent = source;
+  switchDemoTab('result');
+
+  const { thrill, stalled, stalledHeight, engineError } = await runCoasterSource(source, face);
+  msg.textContent = engineError
+    ? `⚠ ${engineError}`
+    : stalled
+    ? `Stalled — the cart didn't have enough speed left to reach ${stalledHeight}m. That's real energy conservation: you can't climb higher than your speed allows, no matter what the block says.`
+    : thrill > 55
+    ? `Ride rating: ${rideRating(thrill)}/100 — too intense. A higher thrill number here is a problem, not an achievement.`
+    : thrill < 12
+    ? `Ride rating: ${rideRating(thrill)}/100 — a bit tame. Try a bigger drop.`
+    : `Ride rating: ${rideRating(thrill)}/100 — thrilling and safe, which is the actual best outcome.`;
+  btn.disabled = false;
+});
+
+document.getElementById('sandboxContinueBtn').addEventListener('click', ()=>{
+  document.getElementById('tutorialCard').classList.add('hidden');
+  document.getElementById('celebrationCard').classList.remove('hidden');
+});
+
+function goToWelcome(){
+  // The one true "beginning" -- the very first screen anyone sees.
+  // Every reset control on this page, wherever it lives, comes here.
+  document.getElementById('tutorialCard').classList.add('hidden');
+  document.getElementById('celebrationCard').classList.add('hidden');
+  document.getElementById('welcomeCard').classList.remove('hidden');
+  stepIndex = 0;
+  placedBlocks = [];
+}
+function beginTutorial(){
+  document.getElementById('welcomeCard').classList.add('hidden');
+  document.getElementById('celebrationCard').classList.add('hidden');
+  document.getElementById('tutorialCard').classList.remove('hidden');
+  stepIndex = 0;
+  placedBlocks = [];
+  // Explicit, exhaustive reset -- don't rely on renderStep() alone to undo
+  // whatever state a *previous* full run (including reaching the sandbox)
+  // left behind. Every element this tutorial ever hides gets put back here.
+  document.getElementById('paletteZone').classList.remove('hidden');
+  document.getElementById('dropzone').classList.remove('hidden');
+  switchDemoTab('result');
+  document.getElementById('runBtn').classList.add('hidden');
+  document.getElementById('continueBtn').classList.add('hidden');
+  document.getElementById('sandboxControls').classList.add('hidden');
+  document.getElementById('sandboxContinueBtn').classList.add('hidden');
+  document.getElementById('resultMsg').textContent = '';
+  document.getElementById('readout').innerHTML = '';
+  drawScene();
+  renderDroppedBlocks();
+  renderStep();
+}
+document.getElementById('startBtn').addEventListener('click', beginTutorial);
+document.getElementById('restartBtn').addEventListener('click', goToWelcome);
+document.getElementById('startOverBtn').addEventListener('click', goToWelcome);
+
+renderProgress();
+</script>
+</body>
+</html>

@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<!-- File version: 7 — fixed stale drag listener leak causing duplicate node errors on second playthrough -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Build a Real Interactive Adventure — Loom in 5 Minutes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#14162B; --ink-2:#1B1E3A; --ink-3:#262A52; --ink-4:#333870;
+  --gold:#E8B34D; --teal:#4FD1C5; --rose:#D9667A; --paper:#F2EFE6; --paper-dim:#B9B6C9;
+  --display:'Fraunces', Georgia, serif; --ui:'Work Sans', system-ui, sans-serif; --mono:'JetBrains Mono', monospace;
+}
+*{box-sizing:border-box;}
+body{margin:0; background:var(--ink); color:var(--paper); font-family:var(--ui); line-height:1.6; min-height:100vh;}
+h1,h2,h3{font-family:var(--display); font-weight:600; line-height:1.25;}
+::selection{background:var(--gold); color:var(--ink);}
+
+.wrap{max-width:880px; margin:0 auto; padding:28px 20px 60px;}
+.topbar{display:flex; align-items:center; justify-content:space-between; margin-bottom:22px;}
+.brand{font-family:var(--display); font-weight:600; font-size:15px; color:var(--paper-dim);}
+.navBtn{
+  background:none; border:1.5px solid var(--ink-4); color:var(--paper-dim); font-family:var(--ui);
+  font-size:12px; font-weight:600; padding:6px 12px; border-radius:999px; cursor:pointer; flex-shrink:0;
+}
+.navBtn:hover{border-color:var(--gold); color:var(--gold);}
+.progress{display:flex; gap:6px;}
+.progress .dot{width:26px; height:5px; border-radius:3px; background:var(--ink-4); transition:background .3s;}
+.progress .dot.done{background:var(--teal);}
+.progress .dot.active{background:var(--gold);}
+
+.card{background:var(--ink-2); border:1px solid var(--ink-4); border-radius:18px; padding:28px; margin-bottom:20px;}
+#welcomeCard h1{font-size:28px; margin:0 0 12px;}
+#welcomeCard p{color:var(--paper-dim); font-size:15px; max-width:60ch; margin:0 0 20px;}
+
+.stepLabel{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--gold); margin-bottom:8px;}
+.stepText{font-size:15.5px; margin:0 0 18px; max-width:58ch;}
+
+.mainGrid{display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;}
+.sceneCol{flex:1; min-width:260px;}
+.demoTabs{display:flex; gap:6px; margin-bottom:12px; border-bottom:1px solid var(--ink-4);}
+.demoTabBtn{
+  background:none; border:none; color:var(--paper-dim); font-family:var(--ui); font-size:13px; font-weight:600;
+  padding:9px 14px; cursor:pointer; border-bottom:3px solid transparent; margin-bottom:-1px;
+}
+.demoTabBtn.active{color:var(--gold); border-bottom-color:var(--gold);}
+.demoTabPanel{display:none;}
+.demoTabPanel.active{display:block;}
+.controlCol{flex:1; min-width:260px;}
+
+.storyBox{
+  background:#0e0f22; border:1px solid var(--ink-4); border-radius:12px; padding:20px;
+  min-height:180px; font-size:14.5px;
+}
+.storyBox .cardTitle{font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--paper-dim); margin-bottom:10px;}
+.storyBox .storyText{margin-bottom:14px; white-space:pre-wrap;}
+.storyBox .choice{
+  display:block; width:100%; text-align:left; background:var(--ink-3); border:1px solid var(--ink-4);
+  color:var(--paper); font-family:var(--ui); font-size:13.5px; padding:10px 14px; border-radius:8px;
+  margin-bottom:8px; cursor:pointer;
+}
+.storyBox .choice:hover{border-color:var(--teal);}
+.storyBox .ending{color:var(--gold); font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:0.04em; margin-top:8px;}
+
+.paletteZone{margin-bottom:16px;}
+.paletteHint{font-size:11.5px; color:var(--paper-dim); margin-bottom:8px;}
+.dragBlock{
+  border-radius:9px; padding:12px 14px; font-size:13.5px; font-weight:600; color:var(--ink);
+  cursor:grab; user-select:none; box-shadow:0 2px 0 rgba(0,0,0,0.2); font-family:var(--mono);
+}
+.dragBlock.node{background:var(--gold);}
+.dragBlock.text{background:var(--teal); font-family:var(--ui);}
+.dragBlock.choice{background:var(--rose);}
+.dragBlock:active{cursor:grabbing;}
+.dragBlock{touch-action:none;}
+.dragGhost{
+  position:fixed; z-index:1000; pointer-events:none; opacity:0.9;
+  transform:translate(-50%,-50%) scale(1.05); box-shadow:0 8px 20px rgba(0,0,0,0.4);
+}
+
+.dropzone{
+  min-height:64px; border:2px dashed var(--ink-4); border-radius:12px; padding:12px;
+  display:flex; flex-direction:column; gap:6px; transition:border-color .2s, background .2s;
+}
+.dropzone.dragover{border-color:var(--teal); background:rgba(79,209,197,0.08);}
+.dropzone .placed{
+  background:var(--ink-3); border-radius:7px; padding:8px 12px; font-size:12.5px; font-family:var(--mono);
+  color:var(--paper); white-space:pre-wrap;
+}
+.dropzone .placeholder{color:var(--paper-dim); font-size:13px; font-style:italic;}
+
+.codeReveal{background:var(--ink-3); border:1px solid var(--teal); border-radius:10px; padding:12px 14px; margin:14px 0;}
+.codeRevealLabel{font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--teal); font-weight:700; margin-bottom:8px;}
+.codeReveal pre{margin:0; font-family:var(--mono); font-size:12.5px; white-space:pre-wrap; color:var(--paper); line-height:1.6;}
+
+.runBtn{
+  background:var(--teal); color:var(--ink); border:none; border-radius:9px; padding:11px 20px;
+  font-size:14px; font-weight:700; cursor:pointer; font-family:var(--ui); margin-top:14px;
+}
+.runBtn:disabled{opacity:0.35; cursor:default;}
+.runBtn.ghost{background:transparent; border:1.5px solid var(--gold); color:var(--gold);}
+.hidden{display:none !important;}
+
+.formula{
+  background:var(--ink-3); border:1px solid var(--teal); border-radius:10px; padding:16px 18px;
+  font-family:var(--mono); font-size:13.5px; color:var(--teal); margin:18px 0; white-space:pre-wrap;
+}
+.celebration h1{font-size:26px;}
+.celebration p{color:var(--paper-dim); font-size:15px; max-width:58ch;}
+.ctaRow{display:flex; gap:10px; flex-wrap:wrap; margin-top:18px;}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">📖 Loom — 5-minute taster</div>
+    <div style="display:flex; gap:8px;">
+      <button class="navBtn" id="startOverBtn">↻ Start over</button>
+      <a href="index.html" class="navBtn">🏠 Home</a>
+    </div>
+    <div class="progress" id="progressDots"></div>
+  </div>
+
+  <div class="card" id="welcomeCard">
+    <h1>Build a real interactive adventure in 5 minutes</h1>
+    <p>This isn't a template with the blanks filled in — it's the actual Loom story engine, unmodified, reading exactly the script your blocks build. Drag a few pieces in. Then play the story you actually made, choices and all.</p>
+    <button class="runBtn" id="startBtn">▶ Let's go</button>
+  </div>
+
+  <div class="card hidden" id="tutorialCard">
+    <div class="stepLabel" id="stepLabel">Step 1 of 6</div>
+    <p class="stepText" id="stepText"></p>
+
+    <div class="mainGrid">
+      <div class="sceneCol">
+        <div class="demoTabs">
+          <button class="demoTabBtn active" id="tabBtnResult">📖 Story</button>
+          <button class="demoTabBtn" id="tabBtnCode">💻 The Real Code</button>
+        </div>
+
+        <div class="demoTabPanel active" id="resultPanel">
+          <div class="storyBox" id="storyBox">
+            <div class="cardTitle">Your story so far</div>
+            <div id="storyPreview" style="color:var(--paper-dim); font-style:italic;">Nothing yet — drag a block in to begin.</div>
+          </div>
+        </div>
+
+        <div class="demoTabPanel" id="codePanel">
+          <div class="codeReveal" id="codeReveal">
+            <div class="codeRevealLabel">This is the real Loom script your blocks just built:</div>
+            <pre id="codeRevealText"></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="controlCol">
+        <div class="paletteZone" id="paletteZone">
+          <div class="paletteHint">Drag this block into your story:</div>
+          <div class="dragBlock" id="dragBlock"></div>
+        </div>
+        <div class="dropzone" id="dropzone">
+          <div class="placeholder" id="dropPlaceholder">Blocks land here, in order</div>
+        </div>
+        <button class="runBtn hidden" id="playBtn">▶ Play your story</button>
+        <button class="runBtn ghost hidden" id="continueBtn">Continue →</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card celebration hidden" id="celebrationCard">
+    <h1>🎉 That's a real, playable adventure — with a real memory.</h1>
+    <p>Here's the part that's actually clever: the story remembered whether you picked up the torch, minutes of "story time" earlier, and used that to decide which choice you were even allowed to see later. That's not a script pretending to branch — it's a genuine condition, checked live, every time.</p>
+    <div class="formula">+ [Switch on the torch] -&gt; sawEverything {item: torch}
+
+  ...is read as: "only offer this choice if the player is
+  carrying a torch." The mirror-image choice checks {!item: torch} --
+  exactly one of the two can ever be true at once.</div>
+    <p>Everything else — the <code>-&gt; target</code> arrows, the node headers — works exactly like it did before. Conditions are just one more real ingredient, not a different system. That's how a two-choice story and a fifty-node story with inventory, flags, and branching consequences are built the same way, just with more of it.</p>
+    <p>You'll also have noticed every script started with <code>@engine: if</code> — the same declaration line LoomSTEM's coding side uses. Worth being honest about the difference: in LoomSTEM, that line is actively checked — call a physics action under a chemistry declaration and it's caught. Here, it's currently a declared header only; Loom doesn't dispatch across multiple engines the way LoomScript calls out to physics or chemistry, so there's no mismatch to catch yet. Same line, same intent, not yet the same enforcement — that gap is real, not glossed over.</p>
+    <div class="ctaRow">
+      <button class="runBtn ghost" id="restartBtn">↻ Try it again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   The real Loom story engine — extracted verbatim from loom.html. Same
+   parser, same choice-requirement logic, same text interpolation. Not
+   reimplemented, not simplified for this tutorial.
+   ========================================================================= */
+function tokenizeExpr(str){
+  const tokens = [];
+  let i = 0;
+  while(i < str.length){
+    const c = str[i];
+    if(/\s/.test(c)){ i++; continue; }
+    if(/[0-9]/.test(c) || (c === "." && /[0-9]/.test(str[i+1]||""))){
+      let j = i; while(j < str.length && /[0-9.]/.test(str[j])) j++;
+      tokens.push({type:"num", value:parseFloat(str.slice(i,j))}); i = j; continue;
+    }
+    if(/[A-Za-z_]/.test(c)){
+      let j = i; while(j < str.length && /[A-Za-z0-9_]/.test(str[j])) j++;
+      tokens.push({type:"ident", value:str.slice(i,j)}); i = j; continue;
+    }
+    if("+-*/%()".includes(c)){ tokens.push({type:"op", value:c}); i++; continue; }
+    tokens.push({type:"unknown", value:c}); i++;
+  }
+  return tokens;
+}
+function parseExprTokens(tokens){
+  let pos = 0;
+  function peek(){ return tokens[pos]; }
+  function next(){ return tokens[pos++]; }
+  function parseExpr(){
+    let node = parseTerm();
+    while(peek() && peek().type==="op" && (peek().value==="+"||peek().value==="-")){
+      const op = next().value; node = {type:"bin", op, left:node, right:parseTerm()};
+    }
+    return node;
+  }
+  function parseTerm(){
+    let node = parseFactor();
+    while(peek() && peek().type==="op" && (peek().value==="*"||peek().value==="/"||peek().value==="%")){
+      const op = next().value; node = {type:"bin", op, left:node, right:parseFactor()};
+    }
+    return node;
+  }
+  function parseFactor(){
+    const t = peek();
+    if(t && t.type==="op" && t.value==="-"){ next(); return {type:"neg", value:parseFactor()}; }
+    if(t && t.type==="op" && t.value==="("){
+      next(); const node = parseExpr();
+      if(peek() && peek().type==="op" && peek().value===")") next();
+      return node;
+    }
+    if(t && t.type==="num"){ next(); return {type:"num", value:t.value}; }
+    if(t && t.type==="ident"){ next(); return {type:"ident", value:t.value}; }
+    if(t) next();
+    return {type:"num", value:0};
+  }
+  if(tokens.length === 0) return {type:"num", value:0};
+  return parseExpr();
+}
+function evalExprAst(ast, vars){
+  switch(ast.type){
+    case "num": return ast.value;
+    case "ident": return vars && Object.prototype.hasOwnProperty.call(vars, ast.value) ? vars[ast.value] : 0;
+    case "neg": return -evalExprAst(ast.value, vars);
+    case "bin": {
+      const l = evalExprAst(ast.left, vars), r = evalExprAst(ast.right, vars);
+      switch(ast.op){
+        case "+": return l + r; case "-": return l - r; case "*": return l * r;
+        case "/": return r === 0 ? 0 : l / r; case "%": return r === 0 ? 0 : l % r;
+      }
+    }
+  }
+  return 0;
+}
+function evalExpr(exprStr, vars){
+  return evalExprAst(parseExprTokens(tokenizeExpr(String(exprStr))), vars || {});
+}
+function formatNumber(n){
+  if(Number.isInteger(n)) return String(n);
+  return String(Math.round(n*100)/100);
+}
+function parseScript(scriptText){
+  const lines = scriptText.replace(/\r\n/g,"\n").split("\n");
+  const nodes = {};
+  let currentId=null, currentEnding=null, bodyLines=[];
+  let setFlags=[], clearFlags=[], setVars=[], addVars=[], setStrings=[], giveItems=[], takeItems=[], choices=[], randomBranches=[], askVar=null, askTarget=null;
+  const order=[]; const errors=[];
+  function commit(lineNoForError){
+    if(currentId===null) return;
+    if(nodes[currentId]) errors.push(`Line ${lineNoForError}: duplicate node id "${currentId}" — later one overwrites the earlier.`);
+    nodes[currentId] = {
+      title:currentId, ending:currentEnding, text:bodyLines.join("\n").trim(),
+      setFlags:setFlags.slice(), clearFlags:clearFlags.slice(),
+      setVars:setVars.slice(), addVars:addVars.slice(), setStrings:setStrings.slice(),
+      giveItems:giveItems.slice(), takeItems:takeItems.slice(),
+      choices:choices.slice(), randomBranches:randomBranches.slice(),
+      askVar, askTarget
+    };
+    order.push(currentId);
+  }
+  lines.forEach((raw, idx)=>{
+    const lineNo = idx+1; const line = raw.trimEnd();
+    const headerMatch = line.match(/^::\s*(.+)$/);
+    if(headerMatch){
+      commit(lineNo);
+      let header = headerMatch[1].trim(); let endingLabel=null;
+      const endingMatch = header.match(/^(.*?)\s*\(ending:\s*(.*?)\)\s*$/i);
+      if(endingMatch){ header = endingMatch[1].trim(); endingLabel = endingMatch[2].trim(); }
+      if(!header){ errors.push(`Line ${lineNo}: a node needs a name right after "::"`); header = `node_${order.length+1}`; }
+      currentId = header; currentEnding = endingLabel; bodyLines=[];
+      setFlags=[]; clearFlags=[]; setVars=[]; addVars=[]; setStrings=[]; giveItems=[]; takeItems=[]; choices=[]; randomBranches=[]; askVar=null; askTarget=null;
+      return;
+    }
+    if(currentId===null){
+      if(line.trim()!=="") errors.push(`Line ${lineNo}: story text found before the first "::" node header — it will be ignored.`);
+      return;
+    }
+    const choiceMatch = line.match(/^\+\s*\[(.+?)\]\s*->\s*([A-Za-z0-9_\- ]+?)\s*(?:\{([^}]+)\})?\s*(?:=>\s*([A-Za-z0-9_\- ]+?))?\s*$/);
+    if(choiceMatch){
+      choices.push({
+        text:choiceMatch[1].trim(), to:choiceMatch[2].trim(),
+        requires: choiceMatch[3] ? choiceMatch[3].trim() : null,
+        continueTo: choiceMatch[4] ? choiceMatch[4].trim() : null
+      });
+      return;
+    }
+    const randomMatch = line.match(/^\?\?\s*(\d+(?:\.\d+)?)\s*->\s*([A-Za-z0-9_\- ]+?)\s*$/);
+    if(randomMatch){ randomBranches.push({ weight: parseFloat(randomMatch[1]), to: randomMatch[2].trim() }); return; }
+    const askMatch = line.match(/^\?\s*ask\s+([A-Za-z0-9_]+?)\s*->\s*([A-Za-z0-9_\- ]+?)\s*$/i);
+    if(askMatch){ askVar = askMatch[1].trim(); askTarget = askMatch[2].trim(); return; }
+    let m = line.match(/^\(\+\s*([A-Za-z0-9_\- ]+?)\s*\)\s*$/);
+    if(m){ setFlags.push(m[1].trim()); return; }
+    m = line.match(/^\(\-\s*([A-Za-z0-9_\- ]+?)\s*\)\s*$/);
+    if(m){ clearFlags.push(m[1].trim()); return; }
+    m = line.match(/^\(set\s+([A-Za-z0-9_]+?)\s*=\s*"([^"]*)"\s*\)\s*$/i);
+    if(m){ setStrings.push({name:m[1].trim(), value:m[2]}); return; }
+    m = line.match(/^\(set\s+([A-Za-z0-9_]+?)\s*=\s*(.+)\)\s*$/i);
+    if(m){ setVars.push({name:m[1].trim(), expr:m[2].trim()}); return; }
+    m = line.match(/^\(add\s+([A-Za-z0-9_]+?)\s*=\s*(.+)\)\s*$/i);
+    if(m){ addVars.push({name:m[1].trim(), expr:m[2].trim()}); return; }
+    m = line.match(/^\(give\s+([A-Za-z0-9_\- ]+?)\s*\)\s*$/i);
+    if(m){ giveItems.push(m[1].trim()); return; }
+    m = line.match(/^\(take\s+([A-Za-z0-9_\- ]+?)\s*\)\s*$/i);
+    if(m){ takeItems.push(m[1].trim()); return; }
+    bodyLines.push(raw);
+  });
+  commit(lines.length);
+  if(order.length===0) errors.push("No nodes found. Every story needs at least one \"::\" section.");
+  order.forEach((id)=>{
+    const n = nodes[id];
+    n.choices.forEach((c)=>{
+      if(c.to.toUpperCase()!=="END" && c.to.toUpperCase()!=="RETURN" && !nodes[c.to]) errors.push(`Node "${id}": choice "${c.text}" points to "${c.to}", which doesn't exist yet.`);
+    });
+  });
+  const startId = order[0] || "start";
+  return { story:{ title:"Untitled Story", author:"", start:startId, nodes, layout:{} }, errors, order };
+}
+function evaluateClause(clause, playState){
+  clause = clause.trim();
+  if(!clause) return true;
+  let m = clause.match(/^item:\s*(.+)$/i);
+  if(m) return playState.inventory.has(m[1].trim());
+  m = clause.match(/^!\s*item:\s*(.+)$/i) || clause.match(/^not\s+item:\s*(.+)$/i);
+  if(m) return !playState.inventory.has(m[1].trim());
+  m = clause.match(/^visited:\s*(.+)$/i);
+  if(m) return (playState.visits[m[1].trim()]||0) >= 1;
+  m = clause.match(/^!\s*visited:\s*(.+)$/i) || clause.match(/^not\s+visited:\s*(.+)$/i);
+  if(m) return (playState.visits[m[1].trim()]||0) === 0;
+  m = clause.match(/^visits:\s*([A-Za-z0-9_\- ]+?)\s*(>=|<=|==|!=|>|<)\s*(-?\d+)\s*$/i);
+  if(m){
+    const val = playState.visits[m[1].trim()]||0; const op = m[2]; const num = parseInt(m[3],10);
+    switch(op){
+      case ">=": return val >= num; case "<=": return val <= num; case "==": return val === num;
+      case "!=": return val !== num; case ">": return val > num; case "<": return val < num;
+    }
+  }
+  m = clause.match(/^(.+?)(>=|<=|==|!=|>|<)(.+)$/);
+  if(m){
+    const lhsRaw = m[1].trim(), op = m[2], rhsRaw = m[3].trim();
+    const rhsStr = rhsRaw.match(/^"([^"]*)"$/);
+    const lhsStr = lhsRaw.match(/^"([^"]*)"$/);
+    if(rhsStr || lhsStr){
+      const lhsVal = lhsStr ? lhsStr[1] : (Object.prototype.hasOwnProperty.call(playState.strings, lhsRaw) ? playState.strings[lhsRaw] : "");
+      const rhsVal = rhsStr ? rhsStr[1] : (Object.prototype.hasOwnProperty.call(playState.strings, rhsRaw) ? playState.strings[rhsRaw] : "");
+      if(op === "==") return lhsVal === rhsVal;
+      if(op === "!=") return lhsVal !== rhsVal;
+      return false;
+    }
+    const l = evalExpr(lhsRaw, playState.vars), r = evalExpr(rhsRaw, playState.vars);
+    switch(op){
+      case ">=": return l >= r; case "<=": return l <= r; case "==": return l === r;
+      case "!=": return l !== r; case ">": return l > r; case "<": return l < r;
+    }
+  }
+  m = clause.match(/^!\s*(.+)$/) || clause.match(/^not\s+(.+)$/i);
+  if(m) return !playState.flags.has(m[1].trim());
+  return playState.flags.has(clause);
+}
+function evaluateRequirement(requiresStr, playState){
+  if(!requiresStr) return true;
+  const orGroups = requiresStr.split("|").map(g=>g.trim()).filter(Boolean);
+  if(orGroups.length === 0) return true;
+  return orGroups.some(group =>
+    group.split(",").map(s=>s.trim()).filter(Boolean).every(clause=>evaluateClause(clause, playState))
+  );
+}
+function applyNodeEffects(node, playState){
+  playState.visits[node.title] = (playState.visits[node.title]||0) + 1;
+  (node.setFlags||[]).forEach(f=>playState.flags.add(f));
+  (node.clearFlags||[]).forEach(f=>playState.flags.delete(f));
+  (node.setVars||[]).forEach(v=>{ playState.vars[v.name] = evalExpr(v.expr, playState.vars); });
+  (node.addVars||[]).forEach(v=>{ playState.vars[v.name] = (playState.vars[v.name]||0) + evalExpr(v.expr, playState.vars); });
+  (node.setStrings||[]).forEach(s=>{ playState.strings[s.name] = s.value; });
+  (node.giveItems||[]).forEach(it=>playState.inventory.add(it));
+  (node.takeItems||[]).forEach(it=>playState.inventory.delete(it));
+}
+function escapeHtml(s){
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+function interpolateText(text, playState){
+  if(!text) return text;
+  function stripQuotes(s){ const m = s.trim().match(/^"([\s\S]*)"$/); return m ? m[1] : s.trim(); }
+  let out = text.replace(/\{([^{}]+?)\?([^{}]+?)::([^{}]+?)\}/g, (match, cond, ifTrue, ifFalse)=>{
+    return evaluateRequirement(cond.trim(), playState) ? stripQuotes(ifTrue) : stripQuotes(ifFalse);
+  });
+  out = out.replace(/\{([A-Za-z0-9_\- ]+?)\}/g, (match, name)=>{
+    const trimmed = name.trim();
+    if(Object.prototype.hasOwnProperty.call(playState.strings, trimmed)) return playState.strings[trimmed];
+    if(Object.prototype.hasOwnProperty.call(playState.vars, trimmed)) return formatNumber(playState.vars[trimmed]);
+    return match;
+  });
+  return out;
+}
+
+/* =========================================================================
+   The guided tutorial. Purely additive, same philosophy as the LoomSTEM
+   taster: one block revealed at a time, always lands at the end.
+   ========================================================================= */
+const STEPS = [
+  { label:'Step 1 of 10', text:'Every Loom story is built from nodes — a specific moment in the story. Drag in the very first one, and set the scene.',
+    block:{cls:'node', text:'Start the story: a torch on the ground, a cabin further on', code:':: start\nYou find a rusty old torch lying by the path, and further on, a cabin with its door slightly open.'} },
+  { label:'Step 2 of 10', text:'Give the player a real choice — not flavour text, a moment they actually decide.',
+    block:{cls:'choice', text:'Choice: pick up the torch', code:'+ [Pick up the torch] -> gotTorch'} },
+  { label:'Step 3 of 10', text:'Every real choice needs at least one alternative.',
+    block:{cls:'choice', text:'Choice: leave it and keep walking', code:'+ [Leave it, head for the cabin] -> noTorch'} },
+  { label:'Step 4 of 10', text:"Build what happens if they picked it up — including actually giving them the torch to carry.",
+    block:{cls:'node', text:'If they took it: they now genuinely carry a torch', code:':: gotTorch\n(give torch)\nYou pocket the torch. It might come in handy.\n\n+ [Head to the cabin] -> insideCabin'} },
+  { label:'Step 5 of 10', text:'And what happens if they left it — no torch, same destination.',
+    block:{cls:'node', text:"If they left it: no torch, straight to the cabin", code:':: noTorch\nYou leave it be and walk on.\n\n+ [Head to the cabin] -> insideCabin'} },
+  { label:'Step 6 of 10', text:"Now the cabin itself. It's dark inside — dark enough that the torch decision from ages ago is about to matter.",
+    block:{cls:'node', text:'The cabin: pitch black inside', code:":: insideCabin\nInside, it's pitch black — you can't see a thing."} },
+  { label:'Step 7 of 10', text:"Here's the real trick: a choice that only appears if the player is actually carrying the torch.",
+    block:{cls:'choice', text:'Choice, ONLY if carrying the torch: switch it on', code:'+ [Switch on the torch] -> sawEverything {item: torch}'} },
+  { label:'Step 8 of 10', text:'And the mirror image — a choice that only appears if they never picked it up.',
+    block:{cls:'choice', text:"Choice, ONLY if NOT carrying the torch: feel your way", code:'+ [Feel your way forward blindly] -> stumbledAround {!item: torch}'} },
+  { label:'Step 9 of 10', text:'The ending only reachable by players who picked up the torch.',
+    block:{cls:'node', text:'Ending: Prepared (torch path)', code:':: sawEverything (ending: Prepared)\nThe torch lights up the room — a table, a chair, an old letter. You see it all clearly.'} },
+  { label:'Step 10 of 10', text:'And the ending only reachable by players who didn\'t.',
+    block:{cls:'node', text:'Ending: In The Dark (no-torch path)', code:":: stumbledAround (ending: In The Dark)\nWithout light, you trip over a stool and knock something off the table. You'll never know what it was."}, showPlay:true }
+];
+
+let stepIndex = 0;
+let placedBlocks = [];
+
+function renderProgress(){
+  const el = document.getElementById('progressDots');
+  el.innerHTML = STEPS.map((_,i)=>{
+    const cls = i < stepIndex ? 'done' : (i === stepIndex ? 'active' : '');
+    return `<div class="dot ${cls}"></div>`;
+  }).join('');
+}
+function buildScript(){
+  return '@engine: if\n\n' + placedBlocks.map(b=>b.code).join('\n\n');
+}
+// Loom's own parser has no concept of "@engine:" -- unlike LoomScript's
+// version, this is currently a declared header only, not something the
+// story engine validates against (Loom doesn't dispatch to multiple
+// engines the way LoomScript calls out to physics/chemistry/maths
+// actions, so there's no "wrong engine" mismatch to catch here yet).
+// It still has to be stripped before the real parser sees it, or it gets
+// flagged as stray text before the first node.
+function stripEngineDeclaration(script){
+  const lines = script.split('\n');
+  const idx = lines.findIndex(l => l.trim().startsWith('@engine:'));
+  if(idx === -1) return { engines: [], script };
+  const engines = lines[idx].split(':')[1].split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  return { engines, script: lines.filter((_,i)=>i!==idx).join('\n') };
+}
+function renderStoryPreview(){
+  const el = document.getElementById('storyPreview');
+  if(placedBlocks.length === 0){
+    el.textContent = 'Nothing yet — drag a block in to begin.';
+    el.style.color = 'var(--paper-dim)';
+    el.style.fontStyle = 'italic';
+  } else {
+    el.style.fontStyle = 'normal';
+    el.style.color = 'var(--paper)';
+    el.textContent = placedBlocks.map(b=>b.text).join('\n\n');
+  }
+  const codeEl = document.getElementById('codeRevealText');
+  codeEl.textContent = placedBlocks.length
+    ? buildScript()
+    : '(the real Loom script will build here as you go)';
+}
+function renderStep(){
+  renderProgress();
+  const step = STEPS[stepIndex];
+  document.getElementById('stepLabel').textContent = step.label;
+  document.getElementById('stepText').textContent = step.text;
+  const dragBlock = document.getElementById('dragBlock');
+  dragBlock.className = 'dragBlock ' + step.block.cls;
+  dragBlock.textContent = step.block.text;
+  dragBlock.dataset.code = step.block.code;
+  dragBlock.dataset.text = step.block.text;
+  document.getElementById('paletteZone').classList.remove('hidden');
+  document.getElementById('dropzone').classList.remove('hidden');
+  document.getElementById('playBtn').classList.add('hidden');
+  document.getElementById('continueBtn').classList.add('hidden');
+}
+function renderDroppedBlocks(){
+  const dz = document.getElementById('dropzone');
+  const placeholder = document.getElementById('dropPlaceholder');
+  dz.innerHTML = '';
+  if(placedBlocks.length === 0){ dz.appendChild(placeholder); renderStoryPreview(); return; }
+  placedBlocks.forEach(b=>{
+    const div = document.createElement('div');
+    div.className = 'placed';
+    div.textContent = b.text;
+    dz.appendChild(div);
+  });
+  renderStoryPreview();
+}
+
+// Pointer Events, not native HTML5 drag-and-drop -- the native drag API
+// only ever fires from real mouse events, and Safari on iPad/iOS never
+// dispatches those from touch. Pointer Events fire uniformly for mouse
+// AND touch in every modern browser, iPad included.
+const dropzone = document.getElementById('dropzone');
+let dragGhost = null;
+let isDragging = false;
+
+function handleBlockDropped(data){
+  placedBlocks.push(data);
+  renderDroppedBlocks();
+  document.getElementById('paletteZone').classList.add('hidden');
+
+  const step = STEPS[stepIndex];
+  if(step.showPlay){
+    document.getElementById('playBtn').classList.remove('hidden');
+  } else {
+    setTimeout(()=>{ stepIndex++; renderStep(); }, 700);
+  }
+}
+function pointInRect(x, y, rect){
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+let dragSessionId = 0;
+let activeCleanup = null;
+document.getElementById('dragBlock').addEventListener('pointerdown', e=>{
+  // Defensive: if a PREVIOUS drag never cleanly finished (a real, known
+  // risk with touch -- lost pointer capture, an interrupted gesture --
+  // pointerup/pointercancel can simply never fire), its listeners would
+  // otherwise linger on document forever and misfire later using
+  // whatever dataset the shared #dragBlock element happens to hold at
+  // that point. Clean any of that up before starting fresh.
+  if(activeCleanup) activeCleanup();
+
+  const source = e.currentTarget;
+  const mySession = ++dragSessionId;
+  isDragging = true;
+  source.setPointerCapture(e.pointerId);
+
+  dragGhost = source.cloneNode(true);
+  dragGhost.classList.add('dragGhost');
+  dragGhost.removeAttribute('id');
+  dragGhost.style.width = source.offsetWidth + 'px';
+  document.body.appendChild(dragGhost);
+  moveGhost(e.clientX, e.clientY);
+
+  function moveGhost(x, y){
+    if(dragGhost){ dragGhost.style.left = x + 'px'; dragGhost.style.top = y + 'px'; }
+  }
+  function onMove(ev){
+    if(mySession !== dragSessionId || !isDragging) return; // a newer drag has since started -- this one is stale
+    moveGhost(ev.clientX, ev.clientY);
+    const rect = dropzone.getBoundingClientRect();
+    dropzone.classList.toggle('dragover', pointInRect(ev.clientX, ev.clientY, rect));
+  }
+  function cleanup(){
+    isDragging = false;
+    if(dragGhost){ dragGhost.remove(); dragGhost = null; }
+    dropzone.classList.remove('dragover');
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    document.removeEventListener('pointercancel', onUp);
+    if(activeCleanup === cleanup) activeCleanup = null;
+  }
+  function onUp(ev){
+    if(mySession !== dragSessionId || !isDragging) return; // stale -- a newer drag already took over
+    source.releasePointerCapture(e.pointerId);
+    const rect = dropzone.getBoundingClientRect();
+    const droppedInside = pointInRect(ev.clientX, ev.clientY, rect);
+    const droppedText = source.dataset.text, droppedCode = source.dataset.code;
+    cleanup();
+    if(droppedInside){
+      handleBlockDropped({ text: droppedText, code: droppedCode });
+    }
+  }
+  activeCleanup = cleanup;
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+  document.addEventListener('pointercancel', onUp);
+});
+
+/* --- Playing the real story, using the real engine --- */
+function switchDemoTab(tab){
+  document.getElementById('tabBtnResult').classList.toggle('active', tab === 'result');
+  document.getElementById('tabBtnCode').classList.toggle('active', tab === 'code');
+  document.getElementById('resultPanel').classList.toggle('active', tab === 'result');
+  document.getElementById('codePanel').classList.toggle('active', tab === 'code');
+}
+document.getElementById('tabBtnResult').addEventListener('click', ()=> switchDemoTab('result'));
+document.getElementById('tabBtnCode').addEventListener('click', ()=> switchDemoTab('code'));
+
+function freshPlayState(){
+  return { flags:new Set(), vars:{}, strings:{}, inventory:new Set(), visits:{} };
+}
+function renderPlayNode(story, nodeId, playState){
+  const node = story.nodes[nodeId];
+  const box = document.getElementById('storyBox');
+  applyNodeEffects(node, playState);
+  const visibleChoices = (node.choices||[]).filter(c=>evaluateRequirement(c.requires, playState));
+  let html = `<div class="cardTitle">Playing: ${nodeId}</div>`;
+  html += `<div class="storyText">${escapeHtml(interpolateText(node.text, playState))}</div>`;
+  if(node.ending){ html += `<div class="ending">🏁 Ending: ${escapeHtml(node.ending)}</div>`; }
+  box.innerHTML = html;
+  visibleChoices.forEach(c=>{
+    const btn = document.createElement('button');
+    btn.className = 'choice';
+    btn.textContent = c.text;
+    btn.addEventListener('click', ()=>{
+      if(c.to.toUpperCase() === 'END') return;
+      renderPlayNode(story, c.to, playState);
+    });
+    box.appendChild(btn);
+  });
+  if(visibleChoices.length === 0 && !node.ending){
+    const note = document.createElement('div');
+    note.style.color = 'var(--paper-dim)';
+    note.style.fontSize = '12.5px';
+    note.style.marginTop = '8px';
+    note.textContent = '(no further choices from here)';
+    box.appendChild(note);
+  }
+}
+document.getElementById('playBtn').addEventListener('click', ()=>{
+  const script = buildScript();
+  const { script: parseable } = stripEngineDeclaration(script);
+  const { story, errors } = parseScript(parseable);
+  switchDemoTab('result');
+  if(errors.length){
+    document.getElementById('storyBox').innerHTML = `<div class="cardTitle">Something's not right</div><div class="storyText">${errors.map(escapeHtml).join('<br>')}</div>`;
+    return;
+  }
+  document.getElementById('playBtn').classList.add('hidden');
+  document.getElementById('continueBtn').classList.remove('hidden');
+  document.getElementById('continueBtn').textContent = 'See what actually just happened →';
+  document.getElementById('storyBox').scrollIntoView({ behavior:'smooth', block:'center' });
+  renderPlayNode(story, story.start, freshPlayState());
+});
+
+document.getElementById('continueBtn').addEventListener('click', ()=>{
+  document.getElementById('tutorialCard').classList.add('hidden');
+  document.getElementById('celebrationCard').classList.remove('hidden');
+});
+
+function goToWelcome(){
+  document.getElementById('tutorialCard').classList.add('hidden');
+  document.getElementById('celebrationCard').classList.add('hidden');
+  document.getElementById('welcomeCard').classList.remove('hidden');
+  stepIndex = 0;
+  placedBlocks = [];
+}
+function beginTutorial(){
+  document.getElementById('welcomeCard').classList.add('hidden');
+  document.getElementById('celebrationCard').classList.add('hidden');
+  document.getElementById('tutorialCard').classList.remove('hidden');
+  stepIndex = 0;
+  placedBlocks = [];
+  // Explicit, exhaustive reset -- don't rely on renderStep() alone to undo
+  // whatever a previous full run (including having reached Play) left behind.
+  // Playing the story replaces #storyBox's entire innerHTML (to show the
+  // played node), which destroys the original #storyPreview child element
+  // living inside it -- so it has to be rebuilt here, or every later call
+  // to renderStoryPreview() throws trying to write to a element that no
+  // longer exists. That throw is the actual reason restart looked broken.
+  document.getElementById('storyBox').innerHTML =
+    '<div class="cardTitle">Your story so far</div>' +
+    '<div id="storyPreview" style="color:var(--paper-dim); font-style:italic;">Nothing yet — drag a block in to begin.</div>';
+  document.getElementById('paletteZone').classList.remove('hidden');
+  document.getElementById('dropzone').classList.remove('hidden');
+  document.getElementById('playBtn').classList.add('hidden');
+  document.getElementById('continueBtn').classList.add('hidden');
+  switchDemoTab('result');
+  renderDroppedBlocks();
+  renderStep();
+}
+document.getElementById('startBtn').addEventListener('click', beginTutorial);
+document.getElementById('restartBtn').addEventListener('click', goToWelcome);
+document.getElementById('startOverBtn').addEventListener('click', goToWelcome);
+
+renderProgress();
+</script>
+</body>
+</html>
